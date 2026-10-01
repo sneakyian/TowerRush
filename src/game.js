@@ -29,6 +29,20 @@ export class Game {
     this.spawnQueue = []; // [{ typeId, at }] sorted by time; `at` is wave-relative seconds
     this.waveTime = 0;
     this.nextEnemyId = 1;
+    this.events = []; // gameplay events since the last drainEvents(), for effects/UI
+  }
+
+  // Record a gameplay event. The queue is capped so a headless simulation
+  // that never drains it cannot grow without bound.
+  pushEvent(event) {
+    this.events.push(event);
+    if (this.events.length > 500) this.events.splice(0, this.events.length - 500);
+  }
+
+  drainEvents() {
+    const events = this.events;
+    this.events = [];
+    return events;
   }
 
   get waveCount() {
@@ -80,6 +94,7 @@ export class Game {
         t += entry.interval;
       }
     }
+    this.pushEvent({ type: 'wave-started', wave: this.waveIndex + 1 });
     return { ok: true, wave: this.waveIndex + 1 };
   }
 
@@ -122,6 +137,8 @@ export class Game {
         enemy.alive = false;
         enemy.leaked = true;
         this.lives = Math.max(0, this.lives - 1);
+        const pos = this.path.positionAt(this.path.totalLength - 1);
+        this.pushEvent({ type: 'enemy-leaked', x: pos.x, y: pos.y });
       }
     }
   }
@@ -139,17 +156,24 @@ export class Game {
       if (!target) continue;
 
       const pos = this.path.positionAt(target.dist);
+      tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
       this.projectiles.push({
         x: spot.x,
         y: spot.y,
+        prevX: spot.x,
+        prevY: spot.y,
         targetId: target.id,
         lastTarget: pos,
         speed: type.projectileSpeed,
         damage: type.damage,
         splashRadius: type.splashRadius,
         color: type.color,
+        towerType: tower.typeId,
+        dirX: 0,
+        dirY: 0,
       });
       tower.cooldown = type.fireInterval;
+      this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId });
     }
   }
 
@@ -176,12 +200,25 @@ export class Game {
       const dy = dest.y - proj.y;
       const distToDest = Math.hypot(dx, dy);
       const step = proj.speed * dt;
+      proj.prevX = proj.x;
+      proj.prevY = proj.y;
+      if (distToDest > 0) {
+        proj.dirX = dx / distToDest;
+        proj.dirY = dy / distToDest;
+      }
 
       if (distToDest <= step) {
         proj.x = dest.x;
         proj.y = dest.y;
         proj.done = true;
         this.applyHit(proj, target);
+        this.pushEvent({
+          type: 'hit',
+          x: proj.x,
+          y: proj.y,
+          towerType: proj.towerType,
+          splash: proj.splashRadius,
+        });
       } else {
         proj.x += (dx / distToDest) * step;
         proj.y += (dy / distToDest) * step;
@@ -209,6 +246,14 @@ export class Game {
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;
+      const pos = this.path.positionAt(enemy.dist);
+      this.pushEvent({
+        type: 'enemy-died',
+        x: pos.x,
+        y: pos.y,
+        bounty: enemy.bounty,
+        enemyType: enemy.typeId,
+      });
     }
   }
 
@@ -217,12 +262,14 @@ export class Game {
 
     if (this.lives <= 0) {
       this.phase = PHASE.LOST;
+      this.pushEvent({ type: 'game-lost' });
       return;
     }
     const waveCleared =
       this.phase === PHASE.WAVE && this.spawnQueue.length === 0 && this.enemies.length === 0;
     if (waveCleared) {
       this.phase = this.waveIndex + 1 >= this.waveCount ? PHASE.WON : PHASE.BUILD;
+      this.pushEvent({ type: this.phase === PHASE.WON ? 'game-won' : 'wave-cleared' });
     }
   }
 }

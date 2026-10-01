@@ -2,12 +2,14 @@
 
 import { LEVEL_1, TOWER_TYPES } from './config.js';
 import { Game, PHASE } from './game.js';
+import { Effects } from './effects.js';
 import { render } from './render.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
 let game = new Game(LEVEL_1);
+const effects = new Effects();
 const ui = { selectedSpot: -1 };
 
 // --- HUD elements -------------------------------------------------------
@@ -50,6 +52,7 @@ startWaveBtn.addEventListener('click', () => {
 
 restartBtn.addEventListener('click', () => {
   game = new Game(LEVEL_1);
+  effects.clear();
   ui.selectedSpot = -1;
   updateHud();
 });
@@ -112,7 +115,9 @@ function frame(now) {
     updateHud();
   }
 
-  render(ctx, game, ui);
+  effects.process(game.drainEvents());
+  effects.update(dt);
+  render(ctx, game, effects, ui, now / 1000);
   requestAnimationFrame(frame);
 }
 
