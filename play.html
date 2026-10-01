@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tower Rush</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #2e3440;
+      color: #eceff4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 16px;
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    #hud {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      font-size: 1.05rem;
+    }
+    #game {
+      border: 3px solid #4c566a;
+      border-radius: 6px;
+      max-width: 100%;
+      touch-action: manipulation;
+    }
+    #controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 5px;
+      background: #5e81ac;
+      color: #fff;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:disabled { background: #4c566a; color: #9aa3b2; cursor: default; }
+    #sell-tower { background: #bf616a; }
+    #status { min-height: 1.4em; font-style: italic; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Tower Rush</h1>
+  <div id="hud">
+    <span>💰 Gold: <strong id="gold">0</strong></span>
+    <span>❤️ Lives: <strong id="lives">0</strong></span>
+    <span>🌊 Wave: <strong id="wave">0 / 0</strong></span>
+  </div>
+  <canvas id="game" width="800" height="480"></canvas>
+  <div id="controls">
+    <button id="start-wave">Start Wave</button>
+    <span id="tower-menu" hidden><button id="sell-tower">Sell (50%)</button></span>
+    <button id="restart" hidden>Play Again</button>
+  </div>
+  <div id="status"></div>
+  <script>
+// All game data in one place: the level, towers, enemies, and waves.
+
+const TOWER_TYPES = {
+  archer: {
+    id: 'archer',
+    name: 'Archer Tower',
+    cost: 70,
+    range: 90,
+    damage: 10,
+    fireInterval: 0.5, // seconds between shots
+    projectileSpeed: 320,
+    splashRadius: 0,
+    color: '#8d6e3a',
+  },
+  cannon: {
+    id: 'cannon',
+    name: 'Cannon Tower',
+    cost: 120,
+    range: 80,
+    damage: 26,
+    fireInterval: 1.5,
+    projectileSpeed: 220,
+    splashRadius: 40,
+    color: '#555b61',
+  },
+  mage: {
+    id: 'mage',
+    name: 'Mage Tower',
+    cost: 100,
+    range: 105,
+    damage: 18,
+    fireInterval: 1.0,
+    projectileSpeed: 280,
+    splashRadius: 0,
+    color: '#5a4fcf',
+  },
+};
+
+const ENEMY_TYPES = {
+  goblin: { id: 'goblin', name: 'Goblin', hp: 40, speed: 60, bounty: 5, radius: 9, color: '#4f9e4f' },
+  wolf:   { id: 'wolf',   name: 'Wolf',   hp: 26, speed: 110, bounty: 4, radius: 8, color: '#9e9e9e' },
+  orc:    { id: 'orc',    name: 'Orc',    hp: 130, speed: 40, bounty: 12, radius: 12, color: '#3e7d3e' },
+};
+
+// A single level. Path waypoints run from spawn (first) to exit (last).
+const LEVEL_1 = {
+  width: 800,
+  height: 480,
+  startingGold: 200,
+  startingLives: 20,
+  sellRefund: 0.5, // fraction of cost returned when selling
+  path: [
+    { x: -20, y: 120 },
+    { x: 180, y: 120 },
+    { x: 240, y: 200 },
+    { x: 180, y: 300 },
+    { x: 300, y: 380 },
+    { x: 520, y: 380 },
+    { x: 600, y: 300 },
+    { x: 540, y: 190 },
+    { x: 640, y: 110 },
+    { x: 820, y: 110 },
+  ],
+  buildSpots: [
+    { x: 120, y: 190 },
+    { x: 280, y: 130 },
+    { x: 130, y: 360 },
+    { x: 310, y: 300 },
+    { x: 470, y: 310 },
+    { x: 480, y: 440 },
+    { x: 620, y: 220 },
+    { x: 700, y: 180 },
+  ],
+  waves: [
+    { entries: [{ type: 'goblin', count: 6, interval: 1.2 }] },
+    { entries: [{ type: 'goblin', count: 8, interval: 1.0 }, { type: 'wolf', count: 3, interval: 0.8 }] },
+    { entries: [{ type: 'wolf', count: 8, interval: 0.7 }, { type: 'goblin', count: 5, interval: 1.0 }] },
+    { entries: [{ type: 'orc', count: 4, interval: 2.0 }, { type: 'goblin', count: 8, interval: 0.8 }] },
+    { entries: [{ type: 'orc', count: 6, interval: 1.5 }, { type: 'wolf', count: 10, interval: 0.6 }] },
+  ],
+};
+
+// A polyline path enemies walk along, addressed by distance from the start.
+
+class Path {
+  constructor(waypoints) {
+    if (!waypoints || waypoints.length < 2) {
+      throw new Error('Path needs at least two waypoints');
+    }
+    this.waypoints = waypoints;
+    this.segmentLengths = [];
+    this.totalLength = 0;
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const dx = waypoints[i + 1].x - waypoints[i].x;
+      const dy = waypoints[i + 1].y - waypoints[i].y;
+      const len = Math.hypot(dx, dy);
+      this.segmentLengths.push(len);
+      this.totalLength += len;
+    }
+  }
+
+  // Position at `dist` from the start, clamped to the path's ends.
+  positionAt(dist) {
+    if (dist <= 0) return { ...this.waypoints[0] };
+    let remaining = dist;
+    for (let i = 0; i < this.segmentLengths.length; i++) {
+      const len = this.segmentLengths[i];
+      if (remaining <= len) {
+        const t = len === 0 ? 0 : remaining / len;
+        const a = this.waypoints[i];
+        const b = this.waypoints[i + 1];
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      }
+      remaining -= len;
+    }
+    return { ...this.waypoints[this.waypoints.length - 1] };
+  }
+}
+
+// Core game logic. No DOM or canvas access here, so it runs in Node for tests.
+
+
+const PHASE = {
+  BUILD: 'build', // between waves; player can build and start the next wave
+  WAVE: 'wave',   // enemies spawning/walking
+  WON: 'won',
+  LOST: 'lost',
+};
+
+class Game {
+  constructor(level, { towerTypes = TOWER_TYPES, enemyTypes = ENEMY_TYPES } = {}) {
+    this.level = level;
+    this.towerTypes = towerTypes;
+    this.enemyTypes = enemyTypes;
+    this.path = new Path(level.path);
+
+    this.gold = level.startingGold;
+    this.lives = level.startingLives;
+    this.phase = PHASE.BUILD;
+    this.waveIndex = -1; // index of the wave in progress (or last completed)
+
+    this.enemies = [];
+    this.towers = []; // one slot per build spot; null = empty
+    for (let i = 0; i < level.buildSpots.length; i++) this.towers.push(null);
+    this.projectiles = [];
+    this.spawnQueue = []; // [{ typeId, at }] sorted by time; `at` is wave-relative seconds
+    this.waveTime = 0;
+    this.nextEnemyId = 1;
+  }
+
+  get waveCount() {
+    return this.level.waves.length;
+  }
+
+  // --- Player actions ---------------------------------------------------
+
+  buildTower(spotIndex, typeId) {
+    if (spotIndex < 0 || spotIndex >= this.towers.length) {
+      return { ok: false, reason: 'invalid-spot' };
+    }
+    if (this.towers[spotIndex]) return { ok: false, reason: 'occupied' };
+    const type = this.towerTypes[typeId];
+    if (!type) return { ok: false, reason: 'unknown-type' };
+    if (this.gold < type.cost) return { ok: false, reason: 'not-enough-gold' };
+    if (this.phase === PHASE.WON || this.phase === PHASE.LOST) {
+      return { ok: false, reason: 'game-over' };
+    }
+
+    this.gold -= type.cost;
+    this.towers[spotIndex] = { typeId, cooldown: 0 };
+    return { ok: true };
+  }
+
+  sellTower(spotIndex) {
+    const tower = this.towers[spotIndex];
+    if (!tower) return { ok: false, reason: 'empty' };
+    const refund = Math.floor(this.towerTypes[tower.typeId].cost * this.level.sellRefund);
+    this.gold += refund;
+    this.towers[spotIndex] = null;
+    return { ok: true, refund };
+  }
+
+  startNextWave() {
+    if (this.waveIndex + 1 >= this.waveCount) return { ok: false, reason: 'no-more-waves' };
+    if (this.phase !== PHASE.BUILD) return { ok: false, reason: 'wave-in-progress' };
+
+    this.waveIndex += 1;
+    this.phase = PHASE.WAVE;
+    this.waveTime = 0;
+    this.spawnQueue = [];
+
+    // Entries within a wave spawn in sequence: all of entry 0, then entry 1, ...
+    let t = 0;
+    for (const entry of this.level.waves[this.waveIndex].entries) {
+      for (let i = 0; i < entry.count; i++) {
+        this.spawnQueue.push({ typeId: entry.type, at: t });
+        t += entry.interval;
+      }
+    }
+    return { ok: true, wave: this.waveIndex + 1 };
+  }
+
+  // --- Simulation --------------------------------------------------------
+
+  update(dt) {
+    if (this.phase === PHASE.WON || this.phase === PHASE.LOST) return;
+    if (this.phase === PHASE.WAVE) this.waveTime += dt;
+
+    this.spawnEnemies();
+    this.moveEnemies(dt);
+    this.updateTowers(dt);
+    this.updateProjectiles(dt);
+    this.cleanupAndCheckEnd();
+  }
+
+  spawnEnemies() {
+    while (this.spawnQueue.length > 0 && this.spawnQueue[0].at <= this.waveTime) {
+      const { typeId } = this.spawnQueue.shift();
+      const type = this.enemyTypes[typeId];
+      this.enemies.push({
+        id: this.nextEnemyId++,
+        typeId,
+        hp: type.hp,
+        maxHp: type.hp,
+        speed: type.speed,
+        bounty: type.bounty,
+        radius: type.radius,
+        dist: 0,
+        alive: true,
+      });
+    }
+  }
+
+  moveEnemies(dt) {
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      enemy.dist += enemy.speed * dt;
+      if (enemy.dist >= this.path.totalLength) {
+        enemy.alive = false;
+        enemy.leaked = true;
+        this.lives = Math.max(0, this.lives - 1);
+      }
+    }
+  }
+
+  updateTowers(dt) {
+    for (let i = 0; i < this.towers.length; i++) {
+      const tower = this.towers[i];
+      if (!tower) continue;
+      tower.cooldown = Math.max(0, tower.cooldown - dt);
+      if (tower.cooldown > 0) continue;
+
+      const type = this.towerTypes[tower.typeId];
+      const spot = this.level.buildSpots[i];
+      const target = this.findTarget(spot, type.range);
+      if (!target) continue;
+
+      const pos = this.path.positionAt(target.dist);
+      this.projectiles.push({
+        x: spot.x,
+        y: spot.y,
+        targetId: target.id,
+        lastTarget: pos,
+        speed: type.projectileSpeed,
+        damage: type.damage,
+        splashRadius: type.splashRadius,
+        color: type.color,
+      });
+      tower.cooldown = type.fireInterval;
+    }
+  }
+
+  // Kingdom Rush convention: shoot the enemy furthest along the path in range.
+  findTarget(from, range) {
+    let best = null;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      if (Math.hypot(pos.x - from.x, pos.y - from.y) > range) continue;
+      if (!best || enemy.dist > best.dist) best = enemy;
+    }
+    return best;
+  }
+
+  updateProjectiles(dt) {
+    for (const proj of this.projectiles) {
+      const target = this.enemies.find((e) => e.id === proj.targetId && e.alive);
+      // Fly toward the live target, or the target's last known spot if it died.
+      const dest = target ? this.path.positionAt(target.dist) : proj.lastTarget;
+      if (target) proj.lastTarget = dest;
+
+      const dx = dest.x - proj.x;
+      const dy = dest.y - proj.y;
+      const distToDest = Math.hypot(dx, dy);
+      const step = proj.speed * dt;
+
+      if (distToDest <= step) {
+        proj.x = dest.x;
+        proj.y = dest.y;
+        proj.done = true;
+        this.applyHit(proj, target);
+      } else {
+        proj.x += (dx / distToDest) * step;
+        proj.y += (dy / distToDest) * step;
+      }
+    }
+    this.projectiles = this.projectiles.filter((p) => !p.done);
+  }
+
+  applyHit(proj, directTarget) {
+    if (proj.splashRadius > 0) {
+      for (const enemy of this.enemies) {
+        if (!enemy.alive) continue;
+        const pos = this.path.positionAt(enemy.dist);
+        if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
+          this.damageEnemy(enemy, proj.damage);
+        }
+      }
+    } else if (directTarget) {
+      this.damageEnemy(directTarget, proj.damage);
+    }
+  }
+
+  damageEnemy(enemy, amount) {
+    enemy.hp -= amount;
+    if (enemy.hp <= 0 && enemy.alive) {
+      enemy.alive = false;
+      this.gold += enemy.bounty;
+    }
+  }
+
+  cleanupAndCheckEnd() {
+    this.enemies = this.enemies.filter((e) => e.alive);
+
+    if (this.lives <= 0) {
+      this.phase = PHASE.LOST;
+      return;
+    }
+    const waveCleared =
+      this.phase === PHASE.WAVE && this.spawnQueue.length === 0 && this.enemies.length === 0;
+    if (waveCleared) {
+      this.phase = this.waveIndex + 1 >= this.waveCount ? PHASE.WON : PHASE.BUILD;
+    }
+  }
+}
+
+// Canvas rendering. Pure drawing — reads game state, never mutates it.
+
+function render(ctx, game, ui) {
+  const { level } = game;
+  ctx.clearRect(0, 0, level.width, level.height);
+
+  // Ground
+  ctx.fillStyle = '#6da14e';
+  ctx.fillRect(0, 0, level.width, level.height);
+
+  // Path
+  ctx.strokeStyle = '#c9b178';
+  ctx.lineWidth = 28;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  level.path.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.stroke();
+
+  // Build spots and towers
+  for (let i = 0; i < level.buildSpots.length; i++) {
+    const spot = level.buildSpots[i];
+    const tower = game.towers[i];
+
+    if (tower) {
+      const type = game.towerTypes[tower.typeId];
+      if (i === ui.selectedSpot) drawRange(ctx, spot, type.range);
+      ctx.fillStyle = type.color;
+      ctx.fillRect(spot.x - 14, spot.y - 14, 28, 28);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(type.name[0].toUpperCase(), spot.x, spot.y + 4);
+    } else {
+      ctx.fillStyle = i === ui.selectedSpot ? '#e8dca8' : '#b5a46f';
+      ctx.beginPath();
+      ctx.arc(spot.x, spot.y, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#7d7049';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  // Enemies with HP bars
+  for (const enemy of game.enemies) {
+    const pos = game.path.positionAt(enemy.dist);
+    const type = game.enemyTypes[enemy.typeId];
+    ctx.fillStyle = type.color;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, enemy.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    const w = 22;
+    ctx.fillStyle = '#2b2b2b';
+    ctx.fillRect(pos.x - w / 2, pos.y - enemy.radius - 9, w, 4);
+    ctx.fillStyle = '#d64545';
+    ctx.fillRect(pos.x - w / 2, pos.y - enemy.radius - 9, w * (enemy.hp / enemy.maxHp), 4);
+  }
+
+  // Projectiles
+  for (const proj of game.projectiles) {
+    ctx.fillStyle = proj.color || '#222';
+    ctx.beginPath();
+    ctx.arc(proj.x, proj.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawRange(ctx, spot, range) {
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(spot.x, spot.y, range, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+// Browser entry point: wires the Game to the canvas and the HUD.
+
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+let game = new Game(LEVEL_1);
+const ui = { selectedSpot: -1 };
+
+// --- HUD elements -------------------------------------------------------
+
+const goldEl = document.getElementById('gold');
+const livesEl = document.getElementById('lives');
+const waveEl = document.getElementById('wave');
+const statusEl = document.getElementById('status');
+const startWaveBtn = document.getElementById('start-wave');
+const restartBtn = document.getElementById('restart');
+const towerMenu = document.getElementById('tower-menu');
+const sellBtn = document.getElementById('sell-tower');
+
+for (const type of Object.values(TOWER_TYPES)) {
+  const btn = document.createElement('button');
+  btn.dataset.type = type.id;
+  btn.textContent = `${type.name} (${type.cost}g)`;
+  btn.addEventListener('click', () => {
+    if (ui.selectedSpot < 0) return;
+    const result = game.buildTower(ui.selectedSpot, type.id);
+    if (!result.ok && result.reason === 'not-enough-gold') {
+      flashStatus('Not enough gold!');
+    }
+    ui.selectedSpot = -1;
+    updateHud();
+  });
+  towerMenu.insertBefore(btn, sellBtn);
+}
+
+sellBtn.addEventListener('click', () => {
+  if (ui.selectedSpot >= 0) game.sellTower(ui.selectedSpot);
+  ui.selectedSpot = -1;
+  updateHud();
+});
+
+startWaveBtn.addEventListener('click', () => {
+  game.startNextWave();
+  updateHud();
+});
+
+restartBtn.addEventListener('click', () => {
+  game = new Game(LEVEL_1);
+  ui.selectedSpot = -1;
+  updateHud();
+});
+
+canvas.addEventListener('click', (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+  ui.selectedSpot = -1;
+  game.level.buildSpots.forEach((spot, i) => {
+    if (Math.hypot(spot.x - x, spot.y - y) <= 20) ui.selectedSpot = i;
+  });
+  updateHud();
+});
+
+let statusTimer = null;
+function flashStatus(text) {
+  statusEl.textContent = text;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(updateHud, 1500);
+}
+
+function updateHud() {
+  goldEl.textContent = game.gold;
+  livesEl.textContent = game.lives;
+  waveEl.textContent = `${Math.max(0, game.waveIndex + 1)} / ${game.waveCount}`;
+
+  startWaveBtn.disabled = game.phase !== PHASE.BUILD;
+  restartBtn.hidden = game.phase !== PHASE.WON && game.phase !== PHASE.LOST;
+
+  const spotSelected = ui.selectedSpot >= 0;
+  const hasTower = spotSelected && !!game.towers[ui.selectedSpot];
+  towerMenu.hidden = !spotSelected;
+  sellBtn.hidden = !hasTower;
+  for (const btn of towerMenu.querySelectorAll('button[data-type]')) {
+    btn.hidden = hasTower;
+    btn.disabled = game.gold < TOWER_TYPES[btn.dataset.type].cost;
+  }
+
+  if (game.phase === PHASE.WON) statusEl.textContent = 'Victory! The kingdom is safe.';
+  else if (game.phase === PHASE.LOST) statusEl.textContent = 'Defeat! The enemies broke through.';
+  else if (game.phase === PHASE.WAVE) statusEl.textContent = `Wave ${game.waveIndex + 1} incoming...`;
+  else statusEl.textContent = spotSelected ? 'Choose a tower to build.' : 'Click a spot to build, then start the wave.';
+}
+
+// --- Game loop ----------------------------------------------------------
+
+let lastTime = performance.now();
+function frame(now) {
+  // Clamp dt so a background tab doesn't fast-forward the simulation.
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  const phaseBefore = game.phase;
+  const goldBefore = game.gold;
+  const livesBefore = game.lives;
+  game.update(dt);
+  if (game.phase !== phaseBefore || game.gold !== goldBefore || game.lives !== livesBefore) {
+    updateHud();
+  }
+
+  render(ctx, game, ui);
+  requestAnimationFrame(frame);
+}
+
+updateHud();
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>

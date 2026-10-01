@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "build": "node tools/build-standalone.js",
     "start": "npx -y http-server -p 8080 -c-1 ."
   },
   "license": "MIT"

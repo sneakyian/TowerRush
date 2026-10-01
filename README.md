@@ -5,12 +5,19 @@ vanilla JavaScript — no dependencies, no build step.
 
 ## How to play
 
-Serve the folder with any static file server and open it in a browser:
+**Easiest:** double-click `play.html` — a self-contained build that runs
+straight from disk, no server or install needed.
+
+Or serve the folder with any static file server and open `index.html`:
 
 ```sh
 npm start          # serves on http://localhost:8080
 # or: python3 -m http.server 8080
 ```
+
+(`index.html` uses ES modules, which browsers refuse to load over
+`file://`, so it only works through a server. `play.html` is regenerated
+from the sources with `npm run build`.)
 
 - Click a **round build spot** next to the path, then pick a tower.
 - Click **Start Wave** to send the next wave. Survive all 5 waves to win.
