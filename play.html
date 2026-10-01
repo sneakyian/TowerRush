@@ -1,0 +1,1315 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tower Rush</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #2e3440;
+      color: #eceff4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 16px;
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    #hud {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      font-size: 1.05rem;
+    }
+    #game {
+      border: 3px solid #4c566a;
+      border-radius: 6px;
+      max-width: 100%;
+      touch-action: manipulation;
+    }
+    #controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 5px;
+      background: #5e81ac;
+      color: #fff;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:disabled { background: #4c566a; color: #9aa3b2; cursor: default; }
+    #sell-tower { background: #bf616a; }
+    #status { min-height: 1.4em; font-style: italic; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Tower Rush</h1>
+  <div id="hud">
+    <span>💰 Gold: <strong id="gold">0</strong></span>
+    <span>❤️ Lives: <strong id="lives">0</strong></span>
+    <span>🌊 Wave: <strong id="wave">0 / 0</strong></span>
+  </div>
+  <canvas id="game" width="800" height="480"></canvas>
+  <div id="controls">
+    <button id="start-wave">Start Wave</button>
+    <span id="tower-menu" hidden><button id="sell-tower">Sell (50%)</button></span>
+    <button id="restart" hidden>Play Again</button>
+  </div>
+  <div id="status"></div>
+  <script>
+// All game data in one place: the level, towers, enemies, and waves.
+
+const TOWER_TYPES = {
+  archer: {
+    id: 'archer',
+    name: 'Archer Tower',
+    cost: 70,
+    range: 90,
+    damage: 10,
+    fireInterval: 0.5, // seconds between shots
+    projectileSpeed: 320,
+    splashRadius: 0,
+    color: '#8d6e3a',
+  },
+  cannon: {
+    id: 'cannon',
+    name: 'Cannon Tower',
+    cost: 120,
+    range: 80,
+    damage: 26,
+    fireInterval: 1.5,
+    projectileSpeed: 220,
+    splashRadius: 40,
+    color: '#555b61',
+  },
+  mage: {
+    id: 'mage',
+    name: 'Mage Tower',
+    cost: 100,
+    range: 105,
+    damage: 18,
+    fireInterval: 1.0,
+    projectileSpeed: 280,
+    splashRadius: 0,
+    color: '#5a4fcf',
+  },
+};
+
+const ENEMY_TYPES = {
+  goblin: { id: 'goblin', name: 'Goblin', hp: 40, speed: 60, bounty: 5, radius: 9, color: '#4f9e4f' },
+  wolf:   { id: 'wolf',   name: 'Wolf',   hp: 26, speed: 110, bounty: 4, radius: 8, color: '#9e9e9e' },
+  orc:    { id: 'orc',    name: 'Orc',    hp: 130, speed: 40, bounty: 12, radius: 12, color: '#3e7d3e' },
+};
+
+// A single level. Path waypoints run from spawn (first) to exit (last).
+const LEVEL_1 = {
+  width: 800,
+  height: 480,
+  startingGold: 200,
+  startingLives: 20,
+  sellRefund: 0.5, // fraction of cost returned when selling
+  path: [
+    { x: -20, y: 120 },
+    { x: 180, y: 120 },
+    { x: 240, y: 200 },
+    { x: 180, y: 300 },
+    { x: 300, y: 380 },
+    { x: 520, y: 380 },
+    { x: 600, y: 300 },
+    { x: 540, y: 190 },
+    { x: 640, y: 110 },
+    { x: 820, y: 110 },
+  ],
+  buildSpots: [
+    { x: 120, y: 190 },
+    { x: 280, y: 130 },
+    { x: 130, y: 360 },
+    { x: 310, y: 300 },
+    { x: 470, y: 310 },
+    { x: 480, y: 440 },
+    { x: 620, y: 220 },
+    { x: 700, y: 180 },
+  ],
+  waves: [
+    { entries: [{ type: 'goblin', count: 6, interval: 1.2 }] },
+    { entries: [{ type: 'goblin', count: 8, interval: 1.0 }, { type: 'wolf', count: 3, interval: 0.8 }] },
+    { entries: [{ type: 'wolf', count: 8, interval: 0.7 }, { type: 'goblin', count: 5, interval: 1.0 }] },
+    { entries: [{ type: 'orc', count: 4, interval: 2.0 }, { type: 'goblin', count: 8, interval: 0.8 }] },
+    { entries: [{ type: 'orc', count: 6, interval: 1.5 }, { type: 'wolf', count: 10, interval: 0.6 }] },
+  ],
+};
+
+// A polyline path enemies walk along, addressed by distance from the start.
+
+class Path {
+  constructor(waypoints) {
+    if (!waypoints || waypoints.length < 2) {
+      throw new Error('Path needs at least two waypoints');
+    }
+    this.waypoints = waypoints;
+    this.segmentLengths = [];
+    this.totalLength = 0;
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      const dx = waypoints[i + 1].x - waypoints[i].x;
+      const dy = waypoints[i + 1].y - waypoints[i].y;
+      const len = Math.hypot(dx, dy);
+      this.segmentLengths.push(len);
+      this.totalLength += len;
+    }
+  }
+
+  // Position at `dist` from the start, clamped to the path's ends.
+  positionAt(dist) {
+    if (dist <= 0) return { ...this.waypoints[0] };
+    let remaining = dist;
+    for (let i = 0; i < this.segmentLengths.length; i++) {
+      const len = this.segmentLengths[i];
+      if (remaining <= len) {
+        const t = len === 0 ? 0 : remaining / len;
+        const a = this.waypoints[i];
+        const b = this.waypoints[i + 1];
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+      }
+      remaining -= len;
+    }
+    return { ...this.waypoints[this.waypoints.length - 1] };
+  }
+}
+
+// Core game logic. No DOM or canvas access here, so it runs in Node for tests.
+
+
+const PHASE = {
+  BUILD: 'build', // between waves; player can build and start the next wave
+  WAVE: 'wave',   // enemies spawning/walking
+  WON: 'won',
+  LOST: 'lost',
+};
+
+class Game {
+  constructor(level, { towerTypes = TOWER_TYPES, enemyTypes = ENEMY_TYPES } = {}) {
+    this.level = level;
+    this.towerTypes = towerTypes;
+    this.enemyTypes = enemyTypes;
+    this.path = new Path(level.path);
+
+    this.gold = level.startingGold;
+    this.lives = level.startingLives;
+    this.phase = PHASE.BUILD;
+    this.waveIndex = -1; // index of the wave in progress (or last completed)
+
+    this.enemies = [];
+    this.towers = []; // one slot per build spot; null = empty
+    for (let i = 0; i < level.buildSpots.length; i++) this.towers.push(null);
+    this.projectiles = [];
+    this.spawnQueue = []; // [{ typeId, at }] sorted by time; `at` is wave-relative seconds
+    this.waveTime = 0;
+    this.nextEnemyId = 1;
+    this.events = []; // gameplay events since the last drainEvents(), for effects/UI
+  }
+
+  // Record a gameplay event. The queue is capped so a headless simulation
+  // that never drains it cannot grow without bound.
+  pushEvent(event) {
+    this.events.push(event);
+    if (this.events.length > 500) this.events.splice(0, this.events.length - 500);
+  }
+
+  drainEvents() {
+    const events = this.events;
+    this.events = [];
+    return events;
+  }
+
+  get waveCount() {
+    return this.level.waves.length;
+  }
+
+  // --- Player actions ---------------------------------------------------
+
+  buildTower(spotIndex, typeId) {
+    if (spotIndex < 0 || spotIndex >= this.towers.length) {
+      return { ok: false, reason: 'invalid-spot' };
+    }
+    if (this.towers[spotIndex]) return { ok: false, reason: 'occupied' };
+    const type = this.towerTypes[typeId];
+    if (!type) return { ok: false, reason: 'unknown-type' };
+    if (this.gold < type.cost) return { ok: false, reason: 'not-enough-gold' };
+    if (this.phase === PHASE.WON || this.phase === PHASE.LOST) {
+      return { ok: false, reason: 'game-over' };
+    }
+
+    this.gold -= type.cost;
+    this.towers[spotIndex] = { typeId, cooldown: 0 };
+    return { ok: true };
+  }
+
+  sellTower(spotIndex) {
+    const tower = this.towers[spotIndex];
+    if (!tower) return { ok: false, reason: 'empty' };
+    const refund = Math.floor(this.towerTypes[tower.typeId].cost * this.level.sellRefund);
+    this.gold += refund;
+    this.towers[spotIndex] = null;
+    return { ok: true, refund };
+  }
+
+  startNextWave() {
+    if (this.waveIndex + 1 >= this.waveCount) return { ok: false, reason: 'no-more-waves' };
+    if (this.phase !== PHASE.BUILD) return { ok: false, reason: 'wave-in-progress' };
+
+    this.waveIndex += 1;
+    this.phase = PHASE.WAVE;
+    this.waveTime = 0;
+    this.spawnQueue = [];
+
+    // Entries within a wave spawn in sequence: all of entry 0, then entry 1, ...
+    let t = 0;
+    for (const entry of this.level.waves[this.waveIndex].entries) {
+      for (let i = 0; i < entry.count; i++) {
+        this.spawnQueue.push({ typeId: entry.type, at: t });
+        t += entry.interval;
+      }
+    }
+    this.pushEvent({ type: 'wave-started', wave: this.waveIndex + 1 });
+    return { ok: true, wave: this.waveIndex + 1 };
+  }
+
+  // --- Simulation --------------------------------------------------------
+
+  update(dt) {
+    if (this.phase === PHASE.WON || this.phase === PHASE.LOST) return;
+    if (this.phase === PHASE.WAVE) this.waveTime += dt;
+
+    this.spawnEnemies();
+    this.moveEnemies(dt);
+    this.updateTowers(dt);
+    this.updateProjectiles(dt);
+    this.cleanupAndCheckEnd();
+  }
+
+  spawnEnemies() {
+    while (this.spawnQueue.length > 0 && this.spawnQueue[0].at <= this.waveTime) {
+      const { typeId } = this.spawnQueue.shift();
+      const type = this.enemyTypes[typeId];
+      this.enemies.push({
+        id: this.nextEnemyId++,
+        typeId,
+        hp: type.hp,
+        maxHp: type.hp,
+        speed: type.speed,
+        bounty: type.bounty,
+        radius: type.radius,
+        dist: 0,
+        alive: true,
+      });
+    }
+  }
+
+  moveEnemies(dt) {
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      enemy.dist += enemy.speed * dt;
+      if (enemy.dist >= this.path.totalLength) {
+        enemy.alive = false;
+        enemy.leaked = true;
+        this.lives = Math.max(0, this.lives - 1);
+        const pos = this.path.positionAt(this.path.totalLength - 1);
+        this.pushEvent({ type: 'enemy-leaked', x: pos.x, y: pos.y });
+      }
+    }
+  }
+
+  updateTowers(dt) {
+    for (let i = 0; i < this.towers.length; i++) {
+      const tower = this.towers[i];
+      if (!tower) continue;
+      tower.cooldown = Math.max(0, tower.cooldown - dt);
+      if (tower.cooldown > 0) continue;
+
+      const type = this.towerTypes[tower.typeId];
+      const spot = this.level.buildSpots[i];
+      const target = this.findTarget(spot, type.range);
+      if (!target) continue;
+
+      const pos = this.path.positionAt(target.dist);
+      tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
+      this.projectiles.push({
+        x: spot.x,
+        y: spot.y,
+        prevX: spot.x,
+        prevY: spot.y,
+        targetId: target.id,
+        lastTarget: pos,
+        speed: type.projectileSpeed,
+        damage: type.damage,
+        splashRadius: type.splashRadius,
+        color: type.color,
+        towerType: tower.typeId,
+        dirX: 0,
+        dirY: 0,
+      });
+      tower.cooldown = type.fireInterval;
+      this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId });
+    }
+  }
+
+  // Kingdom Rush convention: shoot the enemy furthest along the path in range.
+  findTarget(from, range) {
+    let best = null;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      if (Math.hypot(pos.x - from.x, pos.y - from.y) > range) continue;
+      if (!best || enemy.dist > best.dist) best = enemy;
+    }
+    return best;
+  }
+
+  updateProjectiles(dt) {
+    for (const proj of this.projectiles) {
+      const target = this.enemies.find((e) => e.id === proj.targetId && e.alive);
+      // Fly toward the live target, or the target's last known spot if it died.
+      const dest = target ? this.path.positionAt(target.dist) : proj.lastTarget;
+      if (target) proj.lastTarget = dest;
+
+      const dx = dest.x - proj.x;
+      const dy = dest.y - proj.y;
+      const distToDest = Math.hypot(dx, dy);
+      const step = proj.speed * dt;
+      proj.prevX = proj.x;
+      proj.prevY = proj.y;
+      if (distToDest > 0) {
+        proj.dirX = dx / distToDest;
+        proj.dirY = dy / distToDest;
+      }
+
+      if (distToDest <= step) {
+        proj.x = dest.x;
+        proj.y = dest.y;
+        proj.done = true;
+        this.applyHit(proj, target);
+        this.pushEvent({
+          type: 'hit',
+          x: proj.x,
+          y: proj.y,
+          towerType: proj.towerType,
+          splash: proj.splashRadius,
+        });
+      } else {
+        proj.x += (dx / distToDest) * step;
+        proj.y += (dy / distToDest) * step;
+      }
+    }
+    this.projectiles = this.projectiles.filter((p) => !p.done);
+  }
+
+  applyHit(proj, directTarget) {
+    if (proj.splashRadius > 0) {
+      for (const enemy of this.enemies) {
+        if (!enemy.alive) continue;
+        const pos = this.path.positionAt(enemy.dist);
+        if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
+          this.damageEnemy(enemy, proj.damage);
+        }
+      }
+    } else if (directTarget) {
+      this.damageEnemy(directTarget, proj.damage);
+    }
+  }
+
+  damageEnemy(enemy, amount) {
+    enemy.hp -= amount;
+    if (enemy.hp <= 0 && enemy.alive) {
+      enemy.alive = false;
+      this.gold += enemy.bounty;
+      const pos = this.path.positionAt(enemy.dist);
+      this.pushEvent({
+        type: 'enemy-died',
+        x: pos.x,
+        y: pos.y,
+        bounty: enemy.bounty,
+        enemyType: enemy.typeId,
+      });
+    }
+  }
+
+  cleanupAndCheckEnd() {
+    this.enemies = this.enemies.filter((e) => e.alive);
+
+    if (this.lives <= 0) {
+      this.phase = PHASE.LOST;
+      this.pushEvent({ type: 'game-lost' });
+      return;
+    }
+    const waveCleared =
+      this.phase === PHASE.WAVE && this.spawnQueue.length === 0 && this.enemies.length === 0;
+    if (waveCleared) {
+      this.phase = this.waveIndex + 1 >= this.waveCount ? PHASE.WON : PHASE.BUILD;
+      this.pushEvent({ type: this.phase === PHASE.WON ? 'game-won' : 'wave-cleared' });
+    }
+  }
+}
+
+// Visual effects state: particles, floating texts, and banners.
+// No DOM or canvas access — the renderer draws this, tests drive it headless.
+
+
+function rand(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+class Effects {
+  constructor({ enemyTypes = ENEMY_TYPES } = {}) {
+    this.enemyTypes = enemyTypes;
+    this.particles = []; // {x,y,vx,vy,life,maxLife,size,color,shape,gravity}
+    this.texts = [];     // {x,y,text,color,life,maxLife}
+    this.banner = null;  // {text,color,life,maxLife}
+  }
+
+  clear() {
+    this.particles = [];
+    this.texts = [];
+    this.banner = null;
+  }
+
+  // Turn gameplay events (from Game.drainEvents()) into visual effects.
+  process(events) {
+    for (const event of events) {
+      switch (event.type) {
+        case 'shot':
+          this.spawnMuzzle(event);
+          break;
+        case 'hit':
+          this.spawnImpact(event);
+          break;
+        case 'enemy-died':
+          this.spawnDeath(event);
+          break;
+        case 'enemy-leaked':
+          this.addText(event.x, event.y, '-1 life', '#e25555');
+          break;
+        case 'wave-started':
+          this.setBanner(`Wave ${event.wave}`, '#f2e3b3');
+          break;
+        case 'game-won':
+          this.setBanner('Victory!', '#ffd700');
+          break;
+        case 'game-lost':
+          this.setBanner('Defeat!', '#e25555');
+          break;
+      }
+    }
+  }
+
+  spawnMuzzle(event) {
+    if (event.towerType === 'cannon') {
+      // Flash and smoke out of the barrel.
+      for (let i = 0; i < 6; i++) {
+        const spread = event.angle + rand(-0.4, 0.4);
+        this.addParticle({
+          x: event.x + Math.cos(event.angle) * 14,
+          y: event.y - 10 + Math.sin(event.angle) * 14,
+          vx: Math.cos(spread) * rand(40, 110),
+          vy: Math.sin(spread) * rand(40, 110),
+          life: rand(0.15, 0.3),
+          size: rand(2, 4),
+          color: i < 3 ? '#ffd97a' : '#9aa0a6',
+        });
+      }
+    } else if (event.towerType === 'mage') {
+      for (let i = 0; i < 4; i++) {
+        this.addParticle({
+          x: event.x,
+          y: event.y - 26,
+          vx: rand(-30, 30),
+          vy: rand(-30, 30),
+          life: rand(0.2, 0.4),
+          size: rand(1.5, 3),
+          color: '#b9a7ff',
+        });
+      }
+    }
+  }
+
+  spawnImpact(event) {
+    if (event.towerType === 'cannon') {
+      // Explosion: fireball debris, rising smoke, and a shockwave ring.
+      for (let i = 0; i < 14; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(50, 170);
+        this.addParticle({
+          x: event.x,
+          y: event.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: rand(0.3, 0.6),
+          size: rand(2, 5),
+          color: ['#ffd97a', '#ff9f45', '#ff6b35'][i % 3],
+          gravity: 160,
+        });
+      }
+      for (let i = 0; i < 5; i++) {
+        this.addParticle({
+          x: event.x + rand(-8, 8),
+          y: event.y + rand(-8, 8),
+          vx: rand(-15, 15),
+          vy: rand(-45, -15),
+          life: rand(0.5, 0.9),
+          size: rand(5, 9),
+          color: '#7d848a',
+          shape: 'smoke',
+        });
+      }
+      this.addParticle({
+        x: event.x,
+        y: event.y,
+        vx: 0,
+        vy: 0,
+        life: 0.35,
+        size: Math.max(20, event.splash),
+        color: '#ffb347',
+        shape: 'ring',
+      });
+    } else if (event.towerType === 'mage') {
+      for (let i = 0; i < 8; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(30, 90);
+        this.addParticle({
+          x: event.x,
+          y: event.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: rand(0.25, 0.45),
+          size: rand(1.5, 3.5),
+          color: i % 2 ? '#8f7bff' : '#e6dcff',
+        });
+      }
+    } else {
+      for (let i = 0; i < 3; i++) {
+        this.addParticle({
+          x: event.x,
+          y: event.y,
+          vx: rand(-40, 40),
+          vy: rand(-40, 40),
+          life: rand(0.15, 0.25),
+          size: rand(1.5, 2.5),
+          color: '#e8e2d4',
+        });
+      }
+    }
+  }
+
+  spawnDeath(event) {
+    const color = this.enemyTypes[event.enemyType]?.color ?? '#888';
+    for (let i = 0; i < 8; i++) {
+      const angle = rand(0, Math.PI * 2);
+      const speed = rand(25, 85);
+      this.addParticle({
+        x: event.x,
+        y: event.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 30,
+        life: rand(0.3, 0.55),
+        size: rand(2, 4),
+        color: i % 3 === 0 ? '#ddd6c5' : color,
+        gravity: 120,
+      });
+    }
+    this.addText(event.x, event.y - 12, `+${event.bounty}g`, '#ffd700');
+  }
+
+  addParticle({ x, y, vx, vy, life, size, color, shape = 'dot', gravity = 0 }) {
+    this.particles.push({ x, y, vx, vy, life, maxLife: life, size, color, shape, gravity });
+  }
+
+  addText(x, y, text, color) {
+    this.texts.push({ x, y, text, color, life: 0.9, maxLife: 0.9 });
+  }
+
+  setBanner(text, color) {
+    this.banner = { text, color, life: 2.0, maxLife: 2.0 };
+  }
+
+  update(dt) {
+    for (const p of this.particles) {
+      p.life -= dt;
+      p.vy += p.gravity * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+    }
+    this.particles = this.particles.filter((p) => p.life > 0);
+
+    for (const t of this.texts) {
+      t.life -= dt;
+      t.y -= 28 * dt;
+    }
+    this.texts = this.texts.filter((t) => t.life > 0);
+
+    if (this.banner) {
+      this.banner.life -= dt;
+      if (this.banner.life <= 0) this.banner = null;
+    }
+  }
+}
+
+// Canvas rendering. Pure drawing — reads game/effects state, never mutates it.
+// The static terrain (grass, path, castle, decorations) is prerendered once
+// per level onto an offscreen canvas so each frame only draws moving things.
+
+let terrainCache = null; // { level, canvas }
+
+// Small deterministic PRNG so decorations stay put between frames and loads.
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function render(ctx, game, effects, ui, time) {
+  const { level } = game;
+  ctx.clearRect(0, 0, level.width, level.height);
+  ctx.drawImage(getTerrain(game), 0, 0);
+
+  drawBuildSpots(ctx, game, ui, time);
+  drawTowers(ctx, game, ui, time);
+  drawEnemies(ctx, game);
+  drawProjectiles(ctx, game);
+  drawParticles(ctx, effects);
+  drawTexts(ctx, effects);
+  drawBanner(ctx, effects, level);
+}
+
+// --- Static terrain layer -----------------------------------------------
+
+function getTerrain(game) {
+  if (terrainCache && terrainCache.level === game.level) return terrainCache.canvas;
+  const { level } = game;
+  const canvas = document.createElement('canvas');
+  canvas.width = level.width;
+  canvas.height = level.height;
+  const ctx = canvas.getContext('2d');
+  const rng = mulberry32(42);
+
+  // Grass with soft mottling.
+  const sky = ctx.createLinearGradient(0, 0, 0, level.height);
+  sky.addColorStop(0, '#74a855');
+  sky.addColorStop(1, '#5f9448');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, level.width, level.height);
+  for (let i = 0; i < 70; i++) {
+    ctx.fillStyle = rng() > 0.5 ? 'rgba(255,255,230,0.05)' : 'rgba(30,60,20,0.06)';
+    ctx.beginPath();
+    ctx.ellipse(rng() * level.width, rng() * level.height, 15 + rng() * 45, 8 + rng() * 22, rng() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Path: dark edge, dirt fill, worn center line.
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  tracePath(ctx, level.path);
+  ctx.strokeStyle = '#8a7347';
+  ctx.lineWidth = 34;
+  ctx.stroke();
+  tracePath(ctx, level.path);
+  ctx.strokeStyle = '#c9b178';
+  ctx.lineWidth = 28;
+  ctx.stroke();
+  ctx.save();
+  ctx.setLineDash([2, 14]);
+  tracePath(ctx, level.path);
+  ctx.strokeStyle = 'rgba(138,115,71,0.5)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+
+  drawCave(ctx, level);
+  drawCastle(ctx, level);
+  drawDecorations(ctx, game, rng);
+
+  terrainCache = { level, canvas };
+  return canvas;
+}
+
+function tracePath(ctx, waypoints) {
+  ctx.beginPath();
+  waypoints.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+}
+
+function drawCave(ctx, level) {
+  const p = level.path[0];
+  const x = Math.max(16, Math.min(level.width - 16, p.x));
+  ctx.fillStyle = '#4a4238';
+  ctx.beginPath();
+  ctx.arc(x, p.y, 24, Math.PI, 0);
+  ctx.fill();
+  ctx.fillStyle = '#17120d';
+  ctx.beginPath();
+  ctx.arc(x, p.y, 16, Math.PI, 0);
+  ctx.fill();
+}
+
+function drawCastle(ctx, level) {
+  const p = level.path[level.path.length - 1];
+  const x = Math.max(30, Math.min(level.width - 30, p.x));
+  const y = p.y;
+  ctx.fillStyle = '#9aa1a8';
+  ctx.fillRect(x - 26, y - 34, 52, 44);
+  ctx.fillStyle = '#7d848c';
+  for (let i = 0; i < 4; i++) ctx.fillRect(x - 26 + i * 14, y - 42, 9, 10); // crenellations
+  ctx.fillStyle = '#5b4632';
+  ctx.beginPath(); // gate
+  ctx.arc(x, y + 10, 11, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(x - 11, y + 10, 22, 1);
+  ctx.strokeStyle = '#6b7178'; // flag pole
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x + 20, y - 42);
+  ctx.lineTo(x + 20, y - 58);
+  ctx.stroke();
+  ctx.fillStyle = '#c33c3c';
+  ctx.beginPath();
+  ctx.moveTo(x + 20, y - 58);
+  ctx.lineTo(x + 34, y - 53);
+  ctx.lineTo(x + 20, y - 48);
+  ctx.fill();
+}
+
+function drawDecorations(ctx, game, rng) {
+  const { level } = game;
+  const placed = [];
+  let attempts = 0;
+  while (placed.length < 22 && attempts++ < 300) {
+    const x = 14 + rng() * (level.width - 28);
+    const y = 14 + rng() * (level.height - 28);
+    if (distToPath(game, x, y) < 34) continue;
+    if (level.buildSpots.some((s) => Math.hypot(s.x - x, s.y - y) < 32)) continue;
+    if (placed.some((d) => Math.hypot(d.x - x, d.y - y) < 26)) continue;
+    placed.push({ x, y, kind: rng() });
+  }
+  for (const d of placed) {
+    if (d.kind < 0.4) drawTree(ctx, d.x, d.y);
+    else if (d.kind < 0.7) drawBush(ctx, d.x, d.y);
+    else if (d.kind < 0.88) drawRock(ctx, d.x, d.y);
+    else drawFlowers(ctx, d.x, d.y, rng);
+  }
+}
+
+function distToPath(game, x, y) {
+  let min = Infinity;
+  for (let d = 0; d <= game.path.totalLength; d += 8) {
+    const p = game.path.positionAt(d);
+    min = Math.min(min, Math.hypot(p.x - x, p.y - y));
+  }
+  return min;
+}
+
+function drawTree(ctx, x, y) {
+  ctx.fillStyle = 'rgba(20,40,15,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 10, 10, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#6b4a2b';
+  ctx.fillRect(x - 2, y, 4, 10);
+  ctx.fillStyle = '#3f7a35';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 22);
+  ctx.lineTo(x + 10, y + 2);
+  ctx.lineTo(x - 10, y + 2);
+  ctx.fill();
+  ctx.fillStyle = '#4c8c40';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 14);
+  ctx.lineTo(x + 8, y + 4);
+  ctx.lineTo(x - 8, y + 4);
+  ctx.fill();
+}
+
+function drawBush(ctx, x, y) {
+  ctx.fillStyle = '#4c8c40';
+  ctx.beginPath();
+  ctx.arc(x - 4, y, 5, 0, Math.PI * 2);
+  ctx.arc(x + 3, y - 1, 6, 0, Math.PI * 2);
+  ctx.arc(x, y + 3, 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRock(ctx, x, y) {
+  ctx.fillStyle = '#8f9296';
+  ctx.beginPath();
+  ctx.moveTo(x - 7, y + 4);
+  ctx.lineTo(x - 4, y - 4);
+  ctx.lineTo(x + 3, y - 5);
+  ctx.lineTo(x + 7, y + 2);
+  ctx.lineTo(x + 4, y + 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#a8abaf';
+  ctx.beginPath();
+  ctx.moveTo(x - 4, y - 4);
+  ctx.lineTo(x + 3, y - 5);
+  ctx.lineTo(x + 2, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawFlowers(ctx, x, y, rng) {
+  for (let i = 0; i < 3; i++) {
+    const fx = x + (rng() - 0.5) * 14;
+    const fy = y + (rng() - 0.5) * 10;
+    ctx.fillStyle = ['#e8e26e', '#e2918f', '#e8e8e8'][i % 3];
+    ctx.beginPath();
+    ctx.arc(fx, fy, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// --- Dynamic layers -------------------------------------------------------
+
+function drawBuildSpots(ctx, game, ui, time) {
+  for (let i = 0; i < game.level.buildSpots.length; i++) {
+    if (game.towers[i]) continue;
+    const spot = game.level.buildSpots[i];
+    const selected = i === ui.selectedSpot;
+    const pulse = selected ? 2 + Math.sin(time * 5) * 1.5 : 0;
+
+    ctx.fillStyle = 'rgba(20,40,15,0.18)';
+    ctx.beginPath();
+    ctx.ellipse(spot.x, spot.y + 3, 15, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = selected ? '#ece0b4' : '#c5b588';
+    ctx.strokeStyle = '#857450';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(spot.x, spot.y, 13 + pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(133,116,80,0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); // "+" hint
+    ctx.moveTo(spot.x - 5, spot.y);
+    ctx.lineTo(spot.x + 5, spot.y);
+    ctx.moveTo(spot.x, spot.y - 5);
+    ctx.lineTo(spot.x, spot.y + 5);
+    ctx.stroke();
+  }
+}
+
+function drawTowers(ctx, game, ui, time) {
+  for (let i = 0; i < game.towers.length; i++) {
+    const tower = game.towers[i];
+    if (!tower) continue;
+    const spot = game.level.buildSpots[i];
+    const type = game.towerTypes[tower.typeId];
+    if (i === ui.selectedSpot) drawRange(ctx, spot, type.range);
+
+    // Stone base shared by all towers.
+    ctx.fillStyle = 'rgba(20,40,15,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(spot.x, spot.y + 6, 17, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#9aa1a8';
+    ctx.strokeStyle = '#6b7178';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(spot.x, spot.y + 2, 15, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    if (tower.typeId === 'archer') drawArcherTower(ctx, spot);
+    else if (tower.typeId === 'mage') drawMageTower(ctx, spot, time);
+    else drawCannonTower(ctx, spot, tower.angle ?? 0);
+  }
+}
+
+function drawArcherTower(ctx, spot) {
+  ctx.fillStyle = '#8d6e3a';
+  ctx.strokeStyle = '#5f4a26';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); // tapered wooden body
+  ctx.moveTo(spot.x - 10, spot.y + 4);
+  ctx.lineTo(spot.x - 7, spot.y - 18);
+  ctx.lineTo(spot.x + 7, spot.y - 18);
+  ctx.lineTo(spot.x + 10, spot.y + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath(); // plank lines
+  ctx.moveTo(spot.x - 8, spot.y - 4);
+  ctx.lineTo(spot.x + 8, spot.y - 4);
+  ctx.moveTo(spot.x - 7.5, spot.y - 11);
+  ctx.lineTo(spot.x + 7.5, spot.y - 11);
+  ctx.stroke();
+  ctx.fillStyle = '#b5443c';
+  ctx.beginPath(); // roof
+  ctx.moveTo(spot.x - 11, spot.y - 17);
+  ctx.lineTo(spot.x, spot.y - 28);
+  ctx.lineTo(spot.x + 11, spot.y - 17);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawMageTower(ctx, spot, time) {
+  ctx.fillStyle = '#5a4fcf';
+  ctx.strokeStyle = '#3a3390';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); // spire
+  ctx.moveTo(spot.x - 9, spot.y + 4);
+  ctx.lineTo(spot.x - 5, spot.y - 20);
+  ctx.lineTo(spot.x + 5, spot.y - 20);
+  ctx.lineTo(spot.x + 9, spot.y + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  const bob = Math.sin(time * 3) * 2;
+  const oy = spot.y - 26 + bob;
+  ctx.fillStyle = 'rgba(143,123,255,0.35)'; // orb glow
+  ctx.beginPath();
+  ctx.arc(spot.x, oy, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#c9bfff';
+  ctx.beginPath();
+  ctx.arc(spot.x, oy, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawCannonTower(ctx, spot, angle) {
+  const cy = spot.y - 10;
+  ctx.strokeStyle = '#2f3338'; // barrel aims at the last target
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(spot.x, cy);
+  ctx.lineTo(spot.x + Math.cos(angle) * 15, cy + Math.sin(angle) * 15);
+  ctx.stroke();
+  ctx.fillStyle = '#555b61';
+  ctx.strokeStyle = '#33373c';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); // turret dome
+  ctx.arc(spot.x, cy, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#6d747b';
+  ctx.beginPath();
+  ctx.arc(spot.x - 3, cy - 3, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawEnemies(ctx, game) {
+  const sorted = [...game.enemies].sort((a, b) => {
+    return game.path.positionAt(a.dist).y - game.path.positionAt(b.dist).y;
+  });
+  for (const enemy of sorted) {
+    const pos = game.path.positionAt(enemy.dist);
+    const ahead = game.path.positionAt(enemy.dist + 2);
+    const facing = ahead.x >= pos.x ? 1 : -1;
+    const bob = Math.abs(Math.sin(enemy.dist * 0.15)) * 2.5;
+    const x = pos.x;
+    const y = pos.y - bob;
+    const r = enemy.radius;
+    const type = game.enemyTypes[enemy.typeId];
+
+    ctx.fillStyle = 'rgba(20,40,15,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(x, pos.y + r * 0.7, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = type.color;
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    if (enemy.typeId === 'goblin') {
+      ctx.fillStyle = type.color; // pointy ears
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.8, y - r * 0.4);
+      ctx.lineTo(x - r * 1.5, y - r * 1.1);
+      ctx.lineTo(x - r * 0.3, y - r * 0.9);
+      ctx.moveTo(x + r * 0.8, y - r * 0.4);
+      ctx.lineTo(x + r * 1.5, y - r * 1.1);
+      ctx.lineTo(x + r * 0.3, y - r * 0.9);
+      ctx.fill();
+    } else if (enemy.typeId === 'wolf') {
+      ctx.fillStyle = type.color; // upright ears
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.6, y - r * 0.6);
+      ctx.lineTo(x - r * 0.4, y - r * 1.5);
+      ctx.lineTo(x, y - r * 0.8);
+      ctx.moveTo(x + r * 0.6, y - r * 0.6);
+      ctx.lineTo(x + r * 0.4, y - r * 1.5);
+      ctx.lineTo(x, y - r * 0.8);
+      ctx.fill();
+    } else if (enemy.typeId === 'orc') {
+      ctx.fillStyle = '#e8e2d4'; // tusks
+      ctx.beginPath();
+      ctx.moveTo(x - r * 0.45 * facing, y + r * 0.5);
+      ctx.lineTo(x - r * 0.6 * facing, y - r * 0.05);
+      ctx.lineTo(x - r * 0.2 * facing, y + r * 0.3);
+      ctx.fill();
+    }
+
+    // Eyes face the walking direction.
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(x + r * 0.35 * facing, y - r * 0.2, r * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#1c1c1c';
+    ctx.beginPath();
+    ctx.arc(x + r * 0.45 * facing, y - r * 0.2, r * 0.14, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Health bar (only once hurt).
+    if (enemy.hp < enemy.maxHp) {
+      const w = 22;
+      const frac = Math.max(0, enemy.hp / enemy.maxHp);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(x - w / 2 - 1, y - r - 10, w + 2, 5);
+      ctx.fillStyle = frac > 0.5 ? '#6fd64a' : frac > 0.25 ? '#e8c33a' : '#d64545';
+      ctx.fillRect(x - w / 2, y - r - 9, w * frac, 3);
+    }
+  }
+}
+
+function drawProjectiles(ctx, game) {
+  for (const proj of game.projectiles) {
+    if (proj.towerType === 'archer') {
+      const len = 10;
+      ctx.strokeStyle = '#4a3a22';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(proj.x - proj.dirX * len, proj.y - proj.dirY * len);
+      ctx.lineTo(proj.x, proj.y);
+      ctx.stroke();
+      ctx.fillStyle = '#e8e2d4'; // arrowhead
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (proj.towerType === 'mage') {
+      ctx.strokeStyle = 'rgba(143,123,255,0.5)'; // trail
+      ctx.lineWidth = 4;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(proj.prevX, proj.prevY);
+      ctx.lineTo(proj.x, proj.y);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(143,123,255,0.35)';
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#e6dcff';
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = '#2f3338';
+      ctx.beginPath();
+      ctx.arc(proj.x, proj.y, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#596067';
+      ctx.beginPath();
+      ctx.arc(proj.x - 1.3, proj.y - 1.3, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawParticles(ctx, effects) {
+  for (const p of effects.particles) {
+    const frac = Math.max(0, p.life / p.maxLife);
+    ctx.globalAlpha = frac;
+    if (p.shape === 'ring') {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 3 * frac;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (1 - frac) + 6, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (p.shape === 'smoke') {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (1.6 - frac * 0.6), 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * frac, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawTexts(ctx, effects) {
+  ctx.font = 'bold 13px sans-serif';
+  ctx.textAlign = 'center';
+  for (const t of effects.texts) {
+    ctx.globalAlpha = Math.max(0, t.life / t.maxLife);
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(t.text, t.x, t.y);
+    ctx.fillStyle = t.color;
+    ctx.fillText(t.text, t.x, t.y);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawBanner(ctx, effects, level) {
+  const banner = effects.banner;
+  if (!banner) return;
+  const age = banner.maxLife - banner.life;
+  const alpha = Math.min(1, age * 4, banner.life * 2);
+  ctx.globalAlpha = Math.max(0, alpha);
+  ctx.font = 'bold 42px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+  ctx.lineWidth = 6;
+  ctx.strokeText(banner.text, level.width / 2, level.height / 2 - 40);
+  ctx.fillStyle = banner.color;
+  ctx.fillText(banner.text, level.width / 2, level.height / 2 - 40);
+  ctx.globalAlpha = 1;
+}
+
+function drawRange(ctx, spot, range) {
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(spot.x, spot.y, range, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+// Browser entry point: wires the Game to the canvas and the HUD.
+
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+let game = new Game(LEVEL_1);
+const effects = new Effects();
+const ui = { selectedSpot: -1 };
+
+// --- HUD elements -------------------------------------------------------
+
+const goldEl = document.getElementById('gold');
+const livesEl = document.getElementById('lives');
+const waveEl = document.getElementById('wave');
+const statusEl = document.getElementById('status');
+const startWaveBtn = document.getElementById('start-wave');
+const restartBtn = document.getElementById('restart');
+const towerMenu = document.getElementById('tower-menu');
+const sellBtn = document.getElementById('sell-tower');
+
+for (const type of Object.values(TOWER_TYPES)) {
+  const btn = document.createElement('button');
+  btn.dataset.type = type.id;
+  btn.textContent = `${type.name} (${type.cost}g)`;
+  btn.addEventListener('click', () => {
+    if (ui.selectedSpot < 0) return;
+    const result = game.buildTower(ui.selectedSpot, type.id);
+    if (!result.ok && result.reason === 'not-enough-gold') {
+      flashStatus('Not enough gold!');
+    }
+    ui.selectedSpot = -1;
+    updateHud();
+  });
+  towerMenu.insertBefore(btn, sellBtn);
+}
+
+sellBtn.addEventListener('click', () => {
+  if (ui.selectedSpot >= 0) game.sellTower(ui.selectedSpot);
+  ui.selectedSpot = -1;
+  updateHud();
+});
+
+startWaveBtn.addEventListener('click', () => {
+  game.startNextWave();
+  updateHud();
+});
+
+restartBtn.addEventListener('click', () => {
+  game = new Game(LEVEL_1);
+  effects.clear();
+  ui.selectedSpot = -1;
+  updateHud();
+});
+
+canvas.addEventListener('click', (event) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) * (canvas.width / rect.width);
+  const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+
+  ui.selectedSpot = -1;
+  game.level.buildSpots.forEach((spot, i) => {
+    if (Math.hypot(spot.x - x, spot.y - y) <= 20) ui.selectedSpot = i;
+  });
+  updateHud();
+});
+
+let statusTimer = null;
+function flashStatus(text) {
+  statusEl.textContent = text;
+  clearTimeout(statusTimer);
+  statusTimer = setTimeout(updateHud, 1500);
+}
+
+function updateHud() {
+  goldEl.textContent = game.gold;
+  livesEl.textContent = game.lives;
+  waveEl.textContent = `${Math.max(0, game.waveIndex + 1)} / ${game.waveCount}`;
+
+  startWaveBtn.disabled = game.phase !== PHASE.BUILD;
+  restartBtn.hidden = game.phase !== PHASE.WON && game.phase !== PHASE.LOST;
+
+  const spotSelected = ui.selectedSpot >= 0;
+  const hasTower = spotSelected && !!game.towers[ui.selectedSpot];
+  towerMenu.hidden = !spotSelected;
+  sellBtn.hidden = !hasTower;
+  for (const btn of towerMenu.querySelectorAll('button[data-type]')) {
+    btn.hidden = hasTower;
+    btn.disabled = game.gold < TOWER_TYPES[btn.dataset.type].cost;
+  }
+
+  if (game.phase === PHASE.WON) statusEl.textContent = 'Victory! The kingdom is safe.';
+  else if (game.phase === PHASE.LOST) statusEl.textContent = 'Defeat! The enemies broke through.';
+  else if (game.phase === PHASE.WAVE) statusEl.textContent = `Wave ${game.waveIndex + 1} incoming...`;
+  else statusEl.textContent = spotSelected ? 'Choose a tower to build.' : 'Click a spot to build, then start the wave.';
+}
+
+// --- Game loop ----------------------------------------------------------
+
+let lastTime = performance.now();
+function frame(now) {
+  // Clamp dt so a background tab doesn't fast-forward the simulation.
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+
+  const phaseBefore = game.phase;
+  const goldBefore = game.gold;
+  const livesBefore = game.lives;
+  game.update(dt);
+  if (game.phase !== phaseBefore || game.gold !== goldBefore || game.lives !== livesBefore) {
+    updateHud();
+  }
+
+  effects.process(game.drainEvents());
+  effects.update(dt);
+  render(ctx, game, effects, ui, now / 1000);
+  requestAnimationFrame(frame);
+}
+
+updateHud();
+requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>
