@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tower Rush</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #2e3440;
+      color: #eceff4;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 16px;
+    }
+    h1 { margin: 0; font-size: 1.4rem; }
+    #hud {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      font-size: 1.05rem;
+    }
+    #game {
+      border: 3px solid #4c566a;
+      border-radius: 6px;
+      max-width: 100%;
+      touch-action: manipulation;
+    }
+    #controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 5px;
+      background: #5e81ac;
+      color: #fff;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    button:disabled { background: #4c566a; color: #9aa3b2; cursor: default; }
+    #sell-tower { background: #bf616a; }
+    #status { min-height: 1.4em; font-style: italic; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Tower Rush</h1>
+  <div id="hud">
+    <span>💰 Gold: <strong id="gold">0</strong></span>
+    <span>❤️ Lives: <strong id="lives">0</strong></span>
+    <span>🌊 Wave: <strong id="wave">0 / 0</strong></span>
+  </div>
+  <canvas id="game" width="800" height="480"></canvas>
+  <div id="controls">
+    <button id="start-wave">Start Wave</button>
+    <span id="tower-menu" hidden><button id="sell-tower">Sell (50%)</button></span>
+    <button id="restart" hidden>Play Again</button>
+  </div>
+  <div id="status"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
