@@ -25,8 +25,8 @@ from the sources with `npm run build`.)
 - Click a built tower to **upgrade** it (three tiers) or **sell** it for
   half of what you've invested.
 - Click **Start Wave** to send the next wave. Every enemy that reaches the
-  castle costs 1 life; the **boss** on the final wave ends the game if it
-  gets through.
+  castle costs 1 life, heavy brutes (orcs, yetis, trolls, golems) cost 2,
+  and the **boss** on the final wave costs 5.
 
 ### Towers and damage types
 

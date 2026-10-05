@@ -116,6 +116,8 @@ export const TOWER_TYPES = {
 
 export const MAX_TOWER_LEVEL = 3;
 
+// `lives` is what an enemy costs if it reaches the castle (default 1):
+// heavy brutes cost 2, bosses cost 5.
 // `look` drives the sprite composer in render.js:
 //   body: 'round' | 'long' | 'big' | 'wisp'
 //   features: any of ears, club, tooth, wolf, helmet, pads, tusks, shell,
@@ -133,12 +135,12 @@ export const ENEMY_TYPES = {
     look: { body: 'long', features: ['wolf'] },
   },
   orc: {
-    id: 'orc', name: 'Orc', hp: 110, speed: 40, bounty: 18, radius: 12,
+    id: 'orc', name: 'Orc', hp: 110, speed: 40, bounty: 18, radius: 12, lives: 2,
     armor: 0.3, magicResist: 0, color: '#3e7d3e',
     look: { body: 'round', features: ['helmet', 'pads', 'tusks'] },
   },
   orcWarlord: {
-    id: 'orcWarlord', name: 'Orc Warlord', hp: 380, speed: 32, bounty: 150, radius: 19,
+    id: 'orcWarlord', name: 'Orc Warlord', hp: 380, speed: 32, bounty: 150, radius: 19, lives: 5,
     armor: 0.35, magicResist: 0.1, color: '#2f6b2f', boss: true,
     look: { body: 'big', features: ['helmet', 'pads', 'tusks', 'crown'] },
   },
@@ -155,17 +157,17 @@ export const ENEMY_TYPES = {
     look: { body: 'wisp', features: ['glow', 'wings'] },
   },
   yeti: {
-    id: 'yeti', name: 'Yeti', hp: 200, speed: 42, bounty: 24, radius: 13,
+    id: 'yeti', name: 'Yeti', hp: 200, speed: 42, bounty: 24, radius: 13, lives: 2,
     armor: 0.25, magicResist: 0, color: '#d8dde3',
     look: { body: 'round', features: ['horns', 'tooth'] },
   },
   frostTroll: {
-    id: 'frostTroll', name: 'Frost Troll', hp: 420, speed: 34, bounty: 40, radius: 14,
+    id: 'frostTroll', name: 'Frost Troll', hp: 380, speed: 34, bounty: 40, radius: 14, lives: 2,
     armor: 0.45, magicResist: 0, color: '#6f9fbf',
     look: { body: 'round', features: ['pads', 'tusks', 'club'] },
   },
   frostGiant: {
-    id: 'frostGiant', name: 'Frost Giant', hp: 650, speed: 28, bounty: 300, radius: 21,
+    id: 'frostGiant', name: 'Frost Giant', hp: 650, speed: 28, bounty: 300, radius: 21, lives: 5,
     armor: 0.4, magicResist: 0.25, color: '#5d8fb3', boss: true,
     look: { body: 'big', features: ['horns', 'pads', 'club', 'crown', 'scarf'] },
   },
@@ -187,12 +189,12 @@ export const ENEMY_TYPES = {
     look: { body: 'wisp', features: ['wings', 'stinger'] },
   },
   sandGolem: {
-    id: 'sandGolem', name: 'Sand Golem', hp: 450, speed: 30, bounty: 50, radius: 15,
+    id: 'sandGolem', name: 'Sand Golem', hp: 400, speed: 30, bounty: 50, radius: 15, lives: 2,
     armor: 0.6, magicResist: 0, color: '#d9b36c',
     look: { body: 'round', features: ['shell', 'spikes'] },
   },
   sandWyrm: {
-    id: 'sandWyrm', name: 'Sand Wyrm', hp: 1000, speed: 34, bounty: 450, radius: 22,
+    id: 'sandWyrm', name: 'Sand Wyrm', hp: 1000, speed: 34, bounty: 450, radius: 22, lives: 5,
     armor: 0.5, magicResist: 0.2, color: '#c9953f', boss: true,
     look: { body: 'big', features: ['shell', 'spikes', 'tusks', 'crown'] },
   },
@@ -214,12 +216,12 @@ export const ENEMY_TYPES = {
     look: { body: 'round', features: ['hat', 'glow'] },
   },
   bogTroll: {
-    id: 'bogTroll', name: 'Bog Troll', hp: 650, speed: 32, bounty: 60, radius: 15,
+    id: 'bogTroll', name: 'Bog Troll', hp: 540, speed: 32, bounty: 60, radius: 15, lives: 2,
     armor: 0.4, magicResist: 0.2, color: '#4f6b3a',
     look: { body: 'round', features: ['tusks', 'club', 'pads'] },
   },
   hydra: {
-    id: 'hydra', name: 'Hydra', hp: 2000, speed: 30, bounty: 700, radius: 23,
+    id: 'hydra', name: 'Hydra', hp: 2000, speed: 30, bounty: 700, radius: 23, lives: 5,
     armor: 0.35, magicResist: 0.4, color: '#3f8a5a', boss: true,
     look: { body: 'big', features: ['horns', 'spikes', 'tusks', 'crown', 'glow'] },
   },
@@ -241,12 +243,12 @@ export const ENEMY_TYPES = {
     look: { body: 'wisp', features: ['glow', 'hat'] },
   },
   obsidianGolem: {
-    id: 'obsidianGolem', name: 'Obsidian Golem', hp: 900, speed: 28, bounty: 90, radius: 16,
+    id: 'obsidianGolem', name: 'Obsidian Golem', hp: 720, speed: 28, bounty: 90, radius: 16, lives: 2,
     armor: 0.7, magicResist: 0.2, color: '#2c2c34',
     look: { body: 'round', features: ['shell', 'spikes', 'glow'] },
   },
   dragon: {
-    id: 'dragon', name: 'Ember Dragon', hp: 2400, speed: 30, bounty: 1200, radius: 24,
+    id: 'dragon', name: 'Ember Dragon', hp: 2400, speed: 30, bounty: 1200, radius: 24, lives: 5,
     armor: 0.45, magicResist: 0.45, color: '#b8321f', boss: true,
     look: { body: 'big', features: ['wings', 'horns', 'spikes', 'flame', 'crown'] },
   },

@@ -423,14 +423,16 @@ export class Effects {
   }
 
   spawnLeak(event) {
-    this.addText(event.x, event.y, '-1 life', '#e25555');
+    const cost = event.cost || 1;
+    this.addText(event.x, event.y, cost === 1 ? '-1 life' : `-${cost} lives`, '#e25555');
+    // Bigger breaches ring louder.
     this.addParticle({
       x: event.x,
       y: event.y,
       vx: 0,
       vy: 0,
-      life: 0.4,
-      size: 22,
+      life: 0.4 + cost * 0.05,
+      size: 22 + cost * 6,
       color: '#e25555',
       shape: 'ring',
     });

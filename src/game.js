@@ -177,6 +177,7 @@ export class Game {
         bounty: type.bounty,
         radius: type.radius,
         boss: !!type.boss,
+        livesCost: type.lives || 1,
         dist: 0,
         alive: true,
         flash: 0, // seconds of white hit-flash left, for rendering
@@ -209,10 +210,10 @@ export class Game {
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
         enemy.leaked = true;
-        // A boss reaching the castle is a loss outright.
-        this.lives = enemy.boss ? 0 : Math.max(0, this.lives - 1);
+        const cost = enemy.livesCost || 1;
+        this.lives = Math.max(0, this.lives - cost);
         const pos = this.path.positionAt(this.path.totalLength - 1);
-        this.pushEvent({ type: 'enemy-leaked', x: pos.x, y: pos.y, boss: enemy.boss });
+        this.pushEvent({ type: 'enemy-leaked', x: pos.x, y: pos.y, boss: enemy.boss, cost });
       }
     }
   }

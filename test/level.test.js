@@ -99,10 +99,36 @@ test('build spots never sit in water', () => {
   }
 });
 
-test('a boss reaching the castle loses the game outright', () => {
+test('leaks cost 1 life for regulars, 2 for heavies, and 5 for bosses', () => {
+  const level = LEVELS[0];
+  const play = (type) => {
+    const game = new Game({ ...level, waves: [{ entries: [{ type, count: 1, interval: 1 }] }] });
+    game.startNextWave();
+    for (let t = 0; t < 120 && game.phase === PHASE.WAVE; t += 0.05) game.update(0.05);
+    return game;
+  };
+  assert.equal(play('goblin').lives, level.startingLives - 1);
+  assert.equal(play('orc').lives, level.startingLives - 2);
+  const boss = play('orcWarlord');
+  assert.equal(boss.lives, level.startingLives - 5);
+  assert.equal(boss.phase, PHASE.WON, 'a leaked boss still ends the wave rather than the game');
+  const leak = boss.events.find((e) => e.type === 'enemy-leaked');
+  assert.equal(leak.cost, 5);
+});
+
+test('every heavy enemy costs 2 lives and every boss costs 5', () => {
+  for (const enemy of Object.values(ENEMY_TYPES)) {
+    if (enemy.boss) assert.equal(enemy.lives, 5, `${enemy.id} boss life cost`);
+    else if (enemy.radius >= 12) assert.equal(enemy.lives, 2, `${enemy.id} is heavy and should cost 2 lives`);
+    else assert.ok(!enemy.lives || enemy.lives === 1, `${enemy.id} should cost 1 life`);
+  }
+});
+
+test('a leak can still finish the game when lives run out', () => {
   const level = LEVELS[0];
   const game = new Game({
     ...level,
+    startingLives: 4,
     waves: [{ entries: [{ type: 'orcWarlord', count: 1, interval: 1 }] }],
   });
   game.startNextWave();
