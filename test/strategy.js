@@ -27,9 +27,17 @@ export const STRATEGIES = {
   // Archer-heavy opening with a mage and a cannon mixed in, like a typical
   // Kingdom Rush build: archer → mage → archer → cannon → ...
   mixed: ['archer', 'mage', 'archer', 'cannon'],
+  // Kingdom Rush and Radiant Defense towers together.
+  hybrid: ['archer', 'frost', 'mage', 'tesla', 'archer', 'flame', 'cannon', 'laser'],
+  // Only the Radiant Defense quartet.
+  radiant: ['frost', 'tesla', 'flame', 'laser'],
   archersOnly: ['archer'],
   magesOnly: ['mage'],
   cannonsOnly: ['cannon'],
+  frostOnly: ['frost'],
+  teslaOnly: ['tesla'],
+  flameOnly: ['flame'],
+  laserOnly: ['laser'],
 };
 
 // Perform one round of purchases: build on the next free spot if affordable,

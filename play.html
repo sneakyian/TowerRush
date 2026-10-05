@@ -8,46 +8,71 @@
     body {
       margin: 0;
       font-family: system-ui, sans-serif;
-      background: #2e3440;
-      color: #eceff4;
+      background: radial-gradient(ellipse at top, #2a3142 0%, #161a24 60%, #0f1118 100%);
+      min-height: 100vh;
+      color: #e6eaf2;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       padding: 16px;
+      box-sizing: border-box;
     }
-    h1 { margin: 0; font-size: 1.4rem; }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      background: linear-gradient(90deg, #8fd3ff, #ff4fd8);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
     #hud {
       display: flex;
-      gap: 24px;
+      gap: 10px;
       align-items: center;
       flex-wrap: wrap;
       justify-content: center;
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-variant-numeric: tabular-nums;
     }
-    #stage { position: relative; max-width: 100%; }
+    #hud > span {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(6px);
+    }
+    #stage {
+      position: relative;
+      max-width: 100%;
+      border-radius: 10px;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 40px rgba(143, 211, 255, 0.08);
+    }
     #game {
       display: block;
-      border: 3px solid #4c566a;
-      border-radius: 6px;
+      border-radius: 10px;
       max-width: 100%;
       touch-action: manipulation;
     }
     #level-select {
       position: absolute;
       inset: 0;
-      background: rgba(20, 24, 32, 0.9);
-      border-radius: 6px;
+      background: rgba(12, 14, 22, 0.86);
+      backdrop-filter: blur(8px);
+      border-radius: 10px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 12px;
       padding: 16px;
+      overflow: auto;
     }
-    #level-select h2 { margin: 0 0 6px; font-size: 1.3rem; }
-    #level-list { display: flex; flex-direction: column; gap: 8px; width: min(420px, 100%); }
+    #level-select h2 { margin: 0 0 6px; font-size: 1.3rem; letter-spacing: 0.04em; }
+    #level-list { display: flex; flex-direction: column; gap: 8px; width: min(440px, 100%); }
     .level-btn {
       display: flex;
       justify-content: space-between;
@@ -55,25 +80,47 @@
       gap: 12px;
       text-align: left;
       width: 100%;
-      padding: 10px 14px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
     }
-    .level-btn small { opacity: 0.8; font-weight: normal; }
-    .level-btn:disabled { opacity: 0.5; }
+    .level-btn:hover:not(:disabled) { background: rgba(143, 211, 255, 0.18); border-color: rgba(143, 211, 255, 0.5); }
+    .level-btn small { opacity: 0.75; font-weight: normal; }
+    .level-btn:disabled { opacity: 0.45; }
     #controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    #tower-menu { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
     button {
       padding: 8px 14px;
-      border: none;
-      border-radius: 5px;
-      background: #5e81ac;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
       color: #fff;
       font-size: 0.95rem;
       cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
     }
-    button:disabled { background: #4c566a; color: #9aa3b2; cursor: default; }
-    #sell-tower { background: #bf616a; }
-    #upgrade-tower { background: #a3be8c; color: #1f2430; }
-    #tower-info { font-size: 0.9rem; opacity: 0.9; min-height: 1.2em; }
-    #status { min-height: 1.4em; font-style: italic; }
+    button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+    button:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button[data-type] {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-width: 92px;
+      padding: 8px 10px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--tower) 85%, white 15%), var(--tower));
+      color: var(--tower-fg, #fff);
+      border-color: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 14px color-mix(in srgb, var(--tower) 55%, transparent);
+    }
+    button[data-type] .tower-name { font-weight: 600; font-size: 0.85rem; }
+    button[data-type] .tower-cost { font-size: 0.8rem; opacity: 0.85; }
+    #start-wave { background: linear-gradient(180deg, #6fa0d8, #4a6fa5); font-weight: 600; letter-spacing: 0.03em; }
+    #sell-tower { background: linear-gradient(180deg, #d06a72, #a8524c); }
+    #upgrade-tower { background: linear-gradient(180deg, #b7d99f, #8fb273); color: #1b1f2a; font-weight: 600; }
+    #tower-info { font-size: 0.9rem; opacity: 0.85; min-height: 1.2em; }
+    #status { min-height: 1.4em; font-style: italic; opacity: 0.8; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -114,10 +161,13 @@
 // Archers and cannons are physical; mages are magic.
 
 const TOWER_TYPES = {
+  // --- Kingdom Rush trio: projectile towers defined by damage type ---------
   archer: {
     id: 'archer',
     name: 'Archer Tower',
+    desc: 'Fast, cheap arrows. The backbone of any defense.',
     damageType: 'physical',
+    attack: 'projectile',
     projectileSpeed: 320,
     color: '#8d6e3a',
     // levels[0] is the base tower; `cost` is what that tier costs to reach.
@@ -130,7 +180,9 @@ const TOWER_TYPES = {
   mage: {
     id: 'mage',
     name: 'Mage Tower',
+    desc: 'Slow magic bolts that ignore armor.',
     damageType: 'magic',
+    attack: 'projectile',
     projectileSpeed: 280,
     color: '#5a4fcf',
     levels: [
@@ -142,13 +194,76 @@ const TOWER_TYPES = {
   cannon: {
     id: 'cannon',
     name: 'Cannon Tower',
+    desc: 'Splash damage for packed groups.',
     damageType: 'physical',
+    attack: 'projectile',
     projectileSpeed: 220,
     color: '#555b61',
     levels: [
       { cost: 125, damage: 28, range: 80, fireInterval: 1.5, splashRadius: 40 },
       { cost: 220, damage: 52, range: 90, fireInterval: 1.4, splashRadius: 48 },
       { cost: 320, damage: 92, range: 100, fireInterval: 1.3, splashRadius: 56 },
+    ],
+  },
+
+  // --- Radiant Defense quartet: towers defined by their mechanic -----------
+  frost: {
+    id: 'frost',
+    name: 'Frost Spire',
+    desc: 'Ice shards that chill enemies, slowing them down.',
+    damageType: 'magic',
+    attack: 'projectile',
+    projectileSpeed: 300,
+    color: '#8fd3ff',
+    // slow: enemy speed is multiplied by `factor` for `duration` seconds.
+    levels: [
+      { cost: 80, damage: 6, range: 95, fireInterval: 0.8, splashRadius: 0, slow: { factor: 0.55, duration: 2 } },
+      { cost: 130, damage: 12, range: 105, fireInterval: 0.75, splashRadius: 0, slow: { factor: 0.45, duration: 2.2 } },
+      { cost: 190, damage: 20, range: 115, fireInterval: 0.7, splashRadius: 0, slow: { factor: 0.35, duration: 2.5 } },
+    ],
+  },
+  tesla: {
+    id: 'tesla',
+    name: 'Tesla Coil',
+    desc: 'Lightning that arcs from enemy to enemy.',
+    damageType: 'magic',
+    attack: 'chain',
+    color: '#b9e0ff',
+    // chain: hits the target, then jumps to the nearest enemy within
+    // `chainRadius` up to `jumps` more times, losing `falloff` each jump.
+    levels: [
+      { cost: 140, damage: 22, range: 100, fireInterval: 1.2, jumps: 3, chainRadius: 70, falloff: 0.7 },
+      { cost: 230, damage: 42, range: 110, fireInterval: 1.1, jumps: 4, chainRadius: 80, falloff: 0.72 },
+      { cost: 330, damage: 70, range: 120, fireInterval: 1.0, jumps: 5, chainRadius: 90, falloff: 0.75 },
+    ],
+  },
+  flame: {
+    id: 'flame',
+    name: 'Flamethrower',
+    desc: 'Short-range fire that leaves enemies burning.',
+    damageType: 'physical',
+    attack: 'instant',
+    color: '#ff8c33',
+    // burn: `dps` damage per second for `duration` seconds after each hit.
+    levels: [
+      { cost: 110, damage: 4, range: 70, fireInterval: 0.15, burn: { dps: 6, duration: 3 } },
+      { cost: 180, damage: 8, range: 78, fireInterval: 0.15, burn: { dps: 12, duration: 3 } },
+      { cost: 260, damage: 14, range: 86, fireInterval: 0.15, burn: { dps: 20, duration: 3.5 } },
+    ],
+  },
+  laser: {
+    id: 'laser',
+    name: 'Laser Lance',
+    desc: 'A steady beam that burns hotter the longer it holds a target.',
+    damageType: 'magic',
+    attack: 'beam',
+    color: '#ff4fd8',
+    // beam: `dps` continuous damage, scaling up to `rampMultiplier` after
+    // `rampTime` seconds on the same target.
+    levels: [
+      { cost: 160, dps: 20, range: 110, rampTime: 3, rampMultiplier: 2.5 },
+      { cost: 260, dps: 40, range: 120, rampTime: 2.8, rampMultiplier: 2.7 },
+      { cost: 380, dps: 70, range: 130, rampTime: 2.5, rampMultiplier: 3 },
     ],
   },
 };
@@ -705,7 +820,7 @@ class Game {
     }
 
     this.gold -= cost;
-    this.towers[spotIndex] = { typeId, level: 0, cooldown: 0, invested: cost };
+    this.towers[spotIndex] = { typeId, level: 0, cooldown: 0, invested: cost, age: 0 };
     const spot = this.level.buildSpots[spotIndex];
     this.pushEvent({ type: 'tower-built', x: spot.x, y: spot.y, towerType: typeId });
     return { ok: true };
@@ -724,6 +839,7 @@ class Game {
     this.gold -= cost;
     tower.level += 1;
     tower.invested += cost;
+    tower.age = 0;
     const spot = this.level.buildSpots[spotIndex];
     this.pushEvent({ type: 'tower-upgraded', x: spot.x, y: spot.y, towerType: tower.typeId, level: tower.level + 1 });
     return { ok: true, level: tower.level + 1 };
@@ -790,6 +906,9 @@ class Game {
         dist: 0,
         alive: true,
         flash: 0, // seconds of white hit-flash left, for rendering
+        slow: null, // { factor, remaining } while chilled
+        burn: null, // { dps, remaining, damageType } while burning
+        age: 0, // seconds since spawning, for the renderer
       });
       const pos = this.path.positionAt(0);
       this.pushEvent({ type: 'enemy-spawned', x: pos.x, y: pos.y, enemyType: typeId });
@@ -801,7 +920,18 @@ class Game {
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       enemy.flash = Math.max(0, (enemy.flash || 0) - dt);
-      enemy.dist += enemy.speed * dt;
+      enemy.age = (enemy.age || 0) + dt;
+      if (enemy.slow) {
+        enemy.slow.remaining -= dt;
+        if (enemy.slow.remaining <= 0) enemy.slow = null;
+      }
+      if (enemy.burn) {
+        this.damageEnemy(enemy, enemy.burn.dps * dt, enemy.burn.damageType, { flash: false });
+        enemy.burn.remaining -= dt;
+        if (enemy.burn.remaining <= 0) enemy.burn = null;
+        if (!enemy.alive) continue;
+      }
+      enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
         enemy.leaked = true;
@@ -817,36 +947,130 @@ class Game {
     for (let i = 0; i < this.towers.length; i++) {
       const tower = this.towers[i];
       if (!tower) continue;
-      tower.cooldown = Math.max(0, tower.cooldown - dt);
-      if (tower.cooldown > 0) continue;
-
       const type = this.towerTypes[tower.typeId];
       const stats = this.towerStats(tower);
       const spot = this.level.buildSpots[i];
+      const attack = type.attack || 'projectile';
+      tower.age = (tower.age || 0) + dt; // seconds since built/upgraded, for the renderer
+
+      if (attack === 'beam') {
+        this.updateBeam(tower, type, stats, spot, dt);
+        continue;
+      }
+
+      tower.cooldown = Math.max(0, tower.cooldown - dt);
+      if (tower.cooldown > 0) continue;
       const target = this.findTarget(spot, stats.range);
       if (!target) continue;
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
-      this.projectiles.push({
-        x: spot.x,
-        y: spot.y,
-        prevX: spot.x,
-        prevY: spot.y,
-        targetId: target.id,
-        lastTarget: pos,
-        speed: type.projectileSpeed,
-        damage: stats.damage,
-        damageType: type.damageType,
-        splashRadius: stats.splashRadius,
-        color: type.color,
-        towerType: tower.typeId,
-        towerLevel: tower.level,
-        dirX: 0,
-        dirY: 0,
-      });
       tower.cooldown = stats.fireInterval;
       this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level });
+
+      if (attack === 'projectile') {
+        this.projectiles.push({
+          x: spot.x,
+          y: spot.y,
+          startX: spot.x,
+          startY: spot.y,
+          prevX: spot.x,
+          prevY: spot.y,
+          targetId: target.id,
+          lastTarget: pos,
+          speed: type.projectileSpeed,
+          damage: stats.damage,
+          damageType: type.damageType,
+          splashRadius: stats.splashRadius,
+          slow: stats.slow || null,
+          color: type.color,
+          towerType: tower.typeId,
+          towerLevel: tower.level,
+          dirX: 0,
+          dirY: 0,
+        });
+      } else if (attack === 'instant') {
+        this.damageEnemy(target, stats.damage, type.damageType);
+        if (stats.burn) this.applyBurn(target, stats.burn, type.damageType);
+        this.pushEvent({ type: 'hit', x: pos.x, y: pos.y, towerType: tower.typeId, level: tower.level, splash: 0 });
+      } else if (attack === 'chain') {
+        this.chainLightning(spot, target, stats, type, tower);
+      }
+    }
+  }
+
+  // Lightning hits the target, then arcs to the nearest untouched enemy
+  // within chainRadius, losing damage with every jump.
+  chainLightning(spot, target, stats, type, tower) {
+    const points = [{ x: spot.x, y: spot.y - 26 }];
+    const struck = new Set();
+    let current = target;
+    let damage = stats.damage;
+    for (let jump = 0; jump <= stats.jumps && current; jump++) {
+      const pos = this.path.positionAt(current.dist);
+      points.push(pos);
+      struck.add(current.id);
+      this.damageEnemy(current, damage, type.damageType);
+      damage *= stats.falloff;
+      let next = null;
+      let best = Infinity;
+      for (const enemy of this.enemies) {
+        if (!enemy.alive || struck.has(enemy.id)) continue;
+        const p = this.path.positionAt(enemy.dist);
+        const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+        if (d <= stats.chainRadius && d < best) {
+          best = d;
+          next = enemy;
+        }
+      }
+      current = next;
+    }
+    this.pushEvent({ type: 'zap', points, towerType: tower.typeId, level: tower.level });
+  }
+
+  // A beam stays on its target while it can and ramps up the longer it holds.
+  updateBeam(tower, type, stats, spot, dt) {
+    let target = this.enemies.find((e) => e.id === tower.beamTargetId && e.alive) || null;
+    if (target) {
+      const pos = this.path.positionAt(target.dist);
+      if (Math.hypot(pos.x - spot.x, pos.y - spot.y) > stats.range) target = null;
+    }
+    if (!target) {
+      target = this.findTarget(spot, stats.range);
+      tower.beamTargetId = target ? target.id : null;
+      tower.beamTime = 0;
+    }
+    if (!target) return;
+
+    tower.beamTime += dt;
+    const ramp = Math.min(1, tower.beamTime / stats.rampTime);
+    const multiplier = 1 + (stats.rampMultiplier - 1) * ramp;
+    const pos = this.path.positionAt(target.dist);
+    tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
+    this.damageEnemy(target, stats.dps * multiplier * dt, type.damageType, { flash: false });
+  }
+
+  // Current damage multiplier of a beam tower, for the HUD and renderer.
+  beamMultiplier(tower) {
+    const stats = this.towerStats(tower);
+    if (!tower.beamTargetId || !stats.rampTime) return 1;
+    return 1 + (stats.rampMultiplier - 1) * Math.min(1, (tower.beamTime || 0) / stats.rampTime);
+  }
+
+  applySlow(enemy, slow) {
+    // A stronger or fresher chill replaces a weaker one; never stacks.
+    if (!enemy.slow || slow.factor <= enemy.slow.factor) {
+      enemy.slow = { factor: slow.factor, remaining: slow.duration };
+    } else {
+      enemy.slow.remaining = Math.max(enemy.slow.remaining, slow.duration);
+    }
+  }
+
+  applyBurn(enemy, burn, damageType) {
+    if (!enemy.burn || burn.dps >= enemy.burn.dps) {
+      enemy.burn = { dps: burn.dps, remaining: burn.duration, damageType };
+    } else {
+      enemy.burn.remaining = Math.max(enemy.burn.remaining, burn.duration);
     }
   }
 
@@ -908,17 +1132,20 @@ class Game {
         const pos = this.path.positionAt(enemy.dist);
         if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
           this.damageEnemy(enemy, proj.damage, proj.damageType);
+          if (proj.slow) this.applySlow(enemy, proj.slow);
         }
       }
     } else if (directTarget) {
       this.damageEnemy(directTarget, proj.damage, proj.damageType);
+      if (proj.slow) this.applySlow(directTarget, proj.slow);
     }
   }
 
-  damageEnemy(enemy, amount, damageType = 'physical') {
+  damageEnemy(enemy, amount, damageType = 'physical', { flash = true } = {}) {
+    if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
     enemy.hp -= effectiveDamage(amount, damageType, type);
-    enemy.flash = 0.12;
+    if (flash) enemy.flash = 0.12;
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;
@@ -973,6 +1200,7 @@ class Effects {
     this.texts = [];           // {x,y,text,color,life,maxLife}
     this.banner = null;        // {text,color,life,maxLife}
     this.scheduled = [];       // [{delay, x, y, kind}] future bursts
+    this.bolts = [];           // [{points, life, maxLife}] lightning arcs
     this.dustTimer = 0;        // throttles ambient footstep dust
   }
 
@@ -982,6 +1210,7 @@ class Effects {
     this.texts = [];
     this.banner = null;
     this.scheduled = [];
+    this.bolts = [];
   }
 
   // Turn gameplay events (from Game.drainEvents()) into visual effects.
@@ -993,6 +1222,9 @@ class Effects {
           break;
         case 'hit':
           this.spawnImpact(event);
+          break;
+        case 'zap':
+          this.spawnLightning(event);
           break;
         case 'enemy-died':
           this.spawnDeath(event);
@@ -1050,8 +1282,61 @@ class Effects {
         });
       }
     }
+    for (const enemy of game.enemies) {
+      if (!enemy.alive) continue;
+      if (enemy.burn && Math.random() < dt * 14) {
+        const pos = game.path.positionAt(enemy.dist);
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius * 0.6, enemy.radius * 0.6),
+          y: pos.y - enemy.radius * 0.5,
+          vx: rand(-10, 10),
+          vy: rand(-55, -25),
+          life: rand(0.3, 0.55),
+          size: rand(1.5, 3),
+          color: Math.random() < 0.5 ? '#ff9f45' : '#ffd97a',
+        });
+      }
+      if (enemy.slow && Math.random() < dt * 8) {
+        const pos = game.path.positionAt(enemy.dist);
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius, enemy.radius),
+          y: pos.y + rand(-enemy.radius, enemy.radius),
+          vx: rand(-6, 6),
+          vy: rand(-12, -2),
+          life: rand(0.4, 0.7),
+          size: rand(1, 2),
+          color: '#dff3ff',
+        });
+      }
+    }
+    game.towers.forEach((tower, i) => {
+      if (!tower || !tower.beamTargetId) return;
+      const target = game.enemies.find((e) => e.id === tower.beamTargetId && e.alive);
+      if (!target || Math.random() > dt * 30) return;
+      const pos = game.path.positionAt(target.dist);
+      const angle = rand(0, Math.PI * 2);
+      this.addParticle({
+        x: pos.x,
+        y: pos.y,
+        vx: Math.cos(angle) * rand(30, 90),
+        vy: Math.sin(angle) * rand(30, 90) - 20,
+        life: rand(0.15, 0.3),
+        size: rand(1, 2.2),
+        color: Math.random() < 0.5 ? '#ff4fd8' : '#ffffff',
+      });
+    });
     for (const proj of game.projectiles) {
-      if (proj.towerType === 'mage' && Math.random() < dt * 40) {
+      if (proj.towerType === 'frost' && Math.random() < dt * 30) {
+        this.addParticle({
+          x: proj.x + rand(-2, 2),
+          y: proj.y + rand(-2, 2),
+          vx: rand(-8, 8),
+          vy: rand(-8, 8),
+          life: rand(0.2, 0.35),
+          size: rand(1, 2),
+          color: '#dff3ff',
+        });
+      } else if (proj.towerType === 'mage' && Math.random() < dt * 40) {
         this.addParticle({
           x: proj.x + rand(-2, 2),
           y: proj.y + rand(-2, 2),
@@ -1104,6 +1389,24 @@ class Effects {
           color: '#b9a7ff',
         });
       }
+    } else if (event.towerType === 'flame') {
+      // A burst of fire along the nozzle direction.
+      for (let i = 0; i < 4; i++) {
+        const spread = event.angle + rand(-0.3, 0.3);
+        const speed = rand(110, 180);
+        this.addParticle({
+          x: event.x + Math.cos(event.angle) * 16,
+          y: event.y - 8 + Math.sin(event.angle) * 16,
+          vx: Math.cos(spread) * speed,
+          vy: Math.sin(spread) * speed,
+          life: rand(0.18, 0.32),
+          size: rand(3, 5.5),
+          color: ['#ffd97a', '#ff9f45', '#ff6b35', '#ffe8b0'][i % 4],
+          shape: 'smoke',
+        });
+      }
+    } else if (event.towerType === 'tesla' || event.towerType === 'laser') {
+      // Handled by the bolt / beam visuals.
     } else {
       // A tiny puff of dust off the bowstring.
       this.addParticle({
@@ -1167,6 +1470,34 @@ class Effects {
         color: 'rgba(40,32,22,0.55)',
         shape: 'scorch',
       });
+    } else if (event.towerType === 'frost') {
+      for (let i = 0; i < 7; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(30, 90);
+        this.addParticle({
+          x: event.x,
+          y: event.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: rand(0.25, 0.45),
+          size: rand(1.5, 3),
+          color: i % 2 ? '#8fd3ff' : '#ffffff',
+          gravity: 90,
+        });
+      }
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.25, size: 14, color: '#bfe9ff', shape: 'ring' });
+    } else if (event.towerType === 'flame') {
+      for (let i = 0; i < 2; i++) {
+        this.addParticle({
+          x: event.x + rand(-4, 4),
+          y: event.y + rand(-4, 4),
+          vx: rand(-20, 20),
+          vy: rand(-50, -20),
+          life: rand(0.2, 0.4),
+          size: rand(1.5, 2.5),
+          color: '#ffd97a',
+        });
+      }
     } else if (event.towerType === 'mage') {
       for (let i = 0; i < 10; i++) {
         const angle = rand(0, Math.PI * 2);
@@ -1202,6 +1533,25 @@ class Effects {
           size: rand(1.5, 2.5),
           color: i % 2 ? '#e8e2d4' : '#c9a86a',
           gravity: 120,
+        });
+      }
+    }
+  }
+
+  spawnLightning(event) {
+    this.bolts.push({ points: event.points, life: 0.18, maxLife: 0.18 });
+    for (const p of event.points.slice(1)) {
+      for (let i = 0; i < 5; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(40, 110);
+        this.addParticle({
+          x: p.x,
+          y: p.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: rand(0.15, 0.3),
+          size: rand(1, 2.2),
+          color: i % 2 ? '#dff3ff' : '#7ec8ff',
         });
       }
     }
@@ -1389,6 +1739,9 @@ class Effects {
       if (this.banner.life <= 0) this.banner = null;
     }
 
+    for (const b of this.bolts) b.life -= dt;
+    this.bolts = this.bolts.filter((b) => b.life > 0);
+
     for (const s of this.scheduled) {
       s.delay -= dt;
       if (s.delay <= 0 && s.kind === 'firework') this.spawnFirework(s.x, s.y);
@@ -1423,9 +1776,12 @@ function mulberry32(seed) {
 
 function render(ctx, game, effects, ui, time) {
   const { level } = game;
-  const scene = getScene(game);
+  // The canvas may be scaled for high-DPI screens; terrain is prerendered at
+  // the same scale so it stays crisp.
+  const dpr = ctx.getTransform().a || 1;
+  const scene = getScene(game, dpr);
   ctx.clearRect(0, 0, level.width, level.height);
-  ctx.drawImage(scene.terrain, 0, 0);
+  ctx.drawImage(scene.terrain, 0, 0, level.width, level.height);
 
   drawWaterAnimation(ctx, level, time);
   drawParticleList(ctx, effects.groundParticles);
@@ -1434,8 +1790,11 @@ function render(ctx, game, effects, ui, time) {
   drawTowers(ctx, game, ui, time);
   drawEnemies(ctx, game, time);
   drawProjectiles(ctx, game);
+  drawBeams(ctx, game, time);
+  drawBolts(ctx, effects.bolts);
   drawCloudShadows(ctx, scene.clouds, level, time);
-  drawParticleList(ctx, effects.particles);
+  drawParticleList(ctx, effects.particles, true);
+  drawVignette(ctx, scene.vignette, level);
   drawTexts(ctx, effects);
   drawBossBar(ctx, game);
   drawBanner(ctx, effects, level);
@@ -1443,16 +1802,17 @@ function render(ctx, game, effects, ui, time) {
 
 // --- Scene setup (once per level) -----------------------------------------
 
-function getScene(game) {
-  if (sceneCache && sceneCache.level === game.level) return sceneCache;
+function getScene(game, dpr) {
+  if (sceneCache && sceneCache.level === game.level && sceneCache.dpr === dpr) return sceneCache;
   const { level } = game;
   const { theme } = level;
   const rng = mulberry32(42);
 
   const terrain = document.createElement('canvas');
-  terrain.width = level.width;
-  terrain.height = level.height;
+  terrain.width = Math.round(level.width * dpr);
+  terrain.height = Math.round(level.height * dpr);
   const ctx = terrain.getContext('2d');
+  ctx.scale(dpr, dpr);
 
   // Ground with soft mottling.
   const ground = ctx.createLinearGradient(0, 0, 0, level.height);
@@ -1493,8 +1853,28 @@ function getScene(game) {
 
   const decor = placeDecorations(game, rng);
   const clouds = makeClouds(level, rng);
-  sceneCache = { level, terrain, decor, clouds };
+  const vignette = makeVignette(level, dpr);
+  sceneCache = { level, dpr, terrain, decor, clouds, vignette };
   return sceneCache;
+}
+
+// Soft darkening toward the edges, prerendered once; gives the map depth.
+function makeVignette(level, dpr) {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(level.width * dpr);
+  canvas.height = Math.round(level.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const g = ctx.createRadialGradient(level.width / 2, level.height / 2, level.height * 0.45, level.width / 2, level.height / 2, level.width * 0.72);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(10,8,20,0.42)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, level.width, level.height);
+  return canvas;
+}
+
+function drawVignette(ctx, vignette, level) {
+  ctx.drawImage(vignette, 0, 0, level.width, level.height);
 }
 
 function tracePath(ctx, waypoints) {
@@ -1626,6 +2006,7 @@ function drawWaterAnimation(ctx, level, time) {
     ctx.ellipse(w.x, w.y, w.rx, w.ry, 0, 0, Math.PI * 2);
     ctx.clip();
 
+    ctx.globalCompositeOperation = 'lighter';
     if (theme.lava) {
       // Slow brightness pulse over the whole pool.
       ctx.fillStyle = `rgba(255,200,80,${0.08 + Math.sin(time * 1.3 + w.x) * 0.06})`;
@@ -1661,6 +2042,7 @@ function drawWaterAnimation(ctx, level, time) {
       ctx.stroke();
     }
     ctx.restore();
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }
 }
@@ -2001,10 +2383,21 @@ function drawTowers(ctx, game, ui, time) {
     if (i === ui.selectedSpot) drawRange(ctx, spot, stats.range);
 
     drawPlatform(ctx, spot, tower.level);
-    const justFired = tower.cooldown > stats.fireInterval - 0.12;
+    const age = tower.age ?? 1;
+    const pop = age < 0.45 ? 1 + 0.35 * Math.sin((age / 0.45) * Math.PI) * (1 - age / 0.45) : 1;
+    ctx.save();
+    ctx.translate(spot.x, spot.y + 2);
+    ctx.scale(pop, pop);
+    ctx.translate(-spot.x, -(spot.y + 2));
+    const justFired = stats.fireInterval ? tower.cooldown > stats.fireInterval - 0.12 : !!tower.beamTargetId;
     if (tower.typeId === 'archer') drawArcherTower(ctx, spot, time, justFired, tower.level);
     else if (tower.typeId === 'mage') drawMageTower(ctx, spot, time, justFired, tower.level);
-    else drawCannonTower(ctx, spot, tower.angle ?? 0, tower.cooldown / stats.fireInterval, tower.level);
+    else if (tower.typeId === 'cannon') drawCannonTower(ctx, spot, tower.angle ?? 0, tower.cooldown / stats.fireInterval, tower.level);
+    else if (tower.typeId === 'frost') drawFrostTower(ctx, spot, time, justFired, tower.level);
+    else if (tower.typeId === 'tesla') drawTeslaTower(ctx, spot, time, justFired, tower.level);
+    else if (tower.typeId === 'flame') drawFlameTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
+    else if (tower.typeId === 'laser') drawLaserTower(ctx, spot, time, tower.angle ?? 0, tower.beamTargetId ? game.beamMultiplier(tower) : 0, tower.level);
+    ctx.restore();
 
     // Level pips.
     ctx.fillStyle = '#ffd700';
@@ -2299,6 +2692,297 @@ function drawCannonTower(ctx, spot, angle, cooldownFrac, level) {
   }
 }
 
+function drawFrostTower(ctx, spot, time, justFired, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 30 + level * 5;
+  // Icy base ring.
+  ctx.fillStyle = 'rgba(191,233,255,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 2, 13 + level, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Crystal obelisk with inner glow.
+  const glow = 0.55 + Math.sin(time * 3) * 0.15 + (justFired ? 0.3 : 0);
+  ctx.fillStyle = `rgba(143,211,255,${glow})`;
+  ctx.strokeStyle = '#5fa8d8';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h);
+  ctx.lineTo(x + 8 + level, y - 10);
+  ctx.lineTo(x + 4, y + 3);
+  ctx.lineTo(x - 4, y + 3);
+  ctx.lineTo(x - 8 - level, y - 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; // facet highlight
+  ctx.beginPath();
+  ctx.moveTo(x - 1, y - h + 4);
+  ctx.lineTo(x - 5 - level * 0.5, y - 10);
+  ctx.lineTo(x - 2, y - 2);
+  ctx.closePath();
+  ctx.fill();
+  // Smaller side crystals on higher tiers.
+  for (let c = 0; c < level; c++) {
+    const side = c === 0 ? -1 : 1;
+    ctx.fillStyle = `rgba(191,233,255,${glow})`;
+    ctx.beginPath();
+    ctx.moveTo(x + side * 11, y - 16 - c * 2);
+    ctx.lineTo(x + side * 15, y - 2);
+    ctx.lineTo(x + side * 7, y - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // Drifting ice motes.
+  ctx.fillStyle = '#ffffff';
+  for (let m = 0; m < 2 + level; m++) {
+    const a = time * 1.6 + (m / (2 + level)) * Math.PI * 2;
+    ctx.globalAlpha = 0.6 + Math.sin(time * 4 + m) * 0.3;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * (12 + level * 2), y - 14 + Math.sin(a) * 6, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawTeslaTower(ctx, spot, time, justFired, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 28 + level * 5;
+  // Dark iron base block.
+  ctx.fillStyle = '#3b4046';
+  ctx.strokeStyle = '#1f2327';
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(x - 9, y - 8, 18, 12);
+  ctx.strokeRect(x - 9, y - 8, 18, 12);
+  // Central rod with copper rings.
+  ctx.strokeStyle = '#6d747b';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 8);
+  ctx.lineTo(x, y - h);
+  ctx.stroke();
+  ctx.strokeStyle = '#c47a3a';
+  ctx.lineWidth = 3;
+  for (let r = 0; r < 2 + level; r++) {
+    const ry = y - 12 - r * ((h - 14) / (2 + level));
+    ctx.beginPath();
+    ctx.ellipse(x, ry, 7 + (level - r) * 0.5, 2.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Charged sphere with flickering arcs.
+  const charge = 0.5 + Math.sin(time * 9) * 0.2 + (justFired ? 0.4 : 0);
+  ctx.fillStyle = `rgba(126,200,255,${charge * 0.4})`;
+  ctx.beginPath();
+  ctx.arc(x, y - h - 4, 11 + level, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#9aa1a8';
+  ctx.strokeStyle = '#5c6186';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y - h - 4, 6 + level * 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(223,243,255,${charge})`;
+  ctx.lineWidth = 1.2;
+  for (let a = 0; a < 2 + level; a++) {
+    const ang = time * 7 + a * 2.1;
+    const len = 8 + Math.sin(time * 23 + a) * 3;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(ang) * 5, y - h - 4 + Math.sin(ang) * 5);
+    ctx.lineTo(x + Math.cos(ang + 0.4) * (5 + len * 0.5), y - h - 4 + Math.sin(ang + 0.4) * (5 + len * 0.5));
+    ctx.lineTo(x + Math.cos(ang) * (5 + len), y - h - 4 + Math.sin(ang) * (5 + len));
+    ctx.stroke();
+  }
+}
+
+function drawFlameTower(ctx, spot, time, angle, justFired, level) {
+  const x = spot.x;
+  const y = spot.y - 8;
+  // Brass fuel tank.
+  ctx.fillStyle = ['#b8863a', '#c4903a', '#d09a3a'][level];
+  ctx.strokeStyle = '#6e4e1e';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x - 11 - level, y - 12 - level, 22 + level * 2, 18 + level, 6);
+  ctx.strokeStyle = 'rgba(110,78,30,0.6)'; // tank bands
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 10, y - 5);
+  ctx.lineTo(x + 10, y - 5);
+  ctx.moveTo(x - 10, y + 1);
+  ctx.lineTo(x + 10, y + 1);
+  ctx.stroke();
+  // Pressure gauge.
+  ctx.fillStyle = '#eee6c8';
+  ctx.beginPath();
+  ctx.arc(x - 5, y - 6, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#b8403a';
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y - 6);
+  ctx.lineTo(x - 5 + Math.cos(time * 2) * 2, y - 6 + Math.sin(time * 2) * 2);
+  ctx.stroke();
+  // Nozzle aimed at the target.
+  const nx = x + Math.cos(angle) * 14;
+  const ny = y - 2 + Math.sin(angle) * 14;
+  ctx.strokeStyle = '#3b4046';
+  ctx.lineWidth = 5 + level;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 2);
+  ctx.lineTo(nx, ny);
+  ctx.stroke();
+  // Pilot flame at the nozzle, bigger while firing.
+  const f = (justFired ? 7 : 3) + Math.sin(time * 25) * 1.2;
+  ctx.fillStyle = '#ff9f45';
+  ctx.beginPath();
+  ctx.arc(nx + Math.cos(angle) * 3, ny + Math.sin(angle) * 3, f, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffe08a';
+  ctx.beginPath();
+  ctx.arc(nx + Math.cos(angle) * 3, ny + Math.sin(angle) * 3, f * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  if (level >= 2) {
+    // Twin side tanks on the top tier.
+    ctx.fillStyle = '#9b7030';
+    ctx.strokeStyle = '#6e4e1e';
+    ctx.lineWidth = 1;
+    roundRect(ctx, x - 17, y - 8, 5, 12, 2.5);
+    roundRect(ctx, x + 12, y - 8, 5, 12, 2.5);
+  }
+}
+
+function drawLaserTower(ctx, spot, time, angle, multiplier, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 26 + level * 5;
+  // Sleek dark pillar with a pink seam.
+  ctx.fillStyle = '#2b2634';
+  ctx.strokeStyle = '#15121b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 8 - level, y + 4);
+  ctx.lineTo(x - 5, y - h);
+  ctx.lineTo(x + 5, y - h);
+  ctx.lineTo(x + 8 + level, y + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  const hot = multiplier > 0 ? 0.5 + (multiplier - 1) / 4 : 0.25 + Math.sin(time * 2) * 0.1;
+  ctx.strokeStyle = `rgba(255,79,216,${hot})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y + 2);
+  ctx.lineTo(x, y - h + 4);
+  ctx.stroke();
+  // Emitter head swivels toward the target.
+  const hy = y - h - 4;
+  ctx.fillStyle = '#4a4458';
+  ctx.strokeStyle = '#15121b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, hy, 7 + level, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#8a7fa0';
+  ctx.lineWidth = 4 + level;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, hy);
+  ctx.lineTo(x + Math.cos(angle) * (10 + level), hy + Math.sin(angle) * (10 + level));
+  ctx.stroke();
+  // Lens glow scales with how hot the beam is running.
+  ctx.fillStyle = `rgba(255,79,216,${Math.min(1, hot + 0.2)})`;
+  ctx.beginPath();
+  ctx.arc(x + Math.cos(angle) * (11 + level), hy + Math.sin(angle) * (11 + level), 2.5 + hot * 2, 0, Math.PI * 2);
+  ctx.fill();
+  if (level >= 1) {
+    // Cooling fins.
+    ctx.strokeStyle = '#5c5570';
+    ctx.lineWidth = 1.5;
+    for (const fy of [-10, -16, -22]) {
+      ctx.beginPath();
+      ctx.moveTo(x - 9 - level, y + fy);
+      ctx.lineTo(x - 5, y + fy);
+      ctx.moveTo(x + 5, y + fy);
+      ctx.lineTo(x + 9 + level, y + fy);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawBeams(ctx, game, time) {
+  ctx.globalCompositeOperation = 'lighter';
+  game.towers.forEach((tower, i) => {
+    if (!tower || !tower.beamTargetId) return;
+    const target = game.enemies.find((e) => e.id === tower.beamTargetId && e.alive);
+    if (!target) return;
+    const spot = game.level.buildSpots[i];
+    const pos = game.path.positionAt(target.dist);
+    const h = 26 + tower.level * 5 + 4;
+    const mult = game.beamMultiplier(tower);
+    const stats = game.towerStats(tower);
+    const heat = (mult - 1) / (stats.rampMultiplier - 1);
+    const sx = spot.x + Math.cos(tower.angle) * (11 + tower.level);
+    const sy = spot.y - h + Math.sin(tower.angle) * (11 + tower.level);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = `rgba(255,79,216,${0.25 + heat * 0.25})`;
+    ctx.lineWidth = 6 + heat * 6 + Math.sin(time * 30) * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.strokeStyle = heat > 0.8 ? '#ffffff' : '#ffb3ec';
+    ctx.lineWidth = 1.5 + heat * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + heat * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 3 + heat * 4 + Math.sin(time * 40) * 1, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawBolts(ctx, bolts) {
+  ctx.globalCompositeOperation = 'lighter';
+  for (const bolt of bolts) {
+    const frac = Math.max(0, bolt.life / bolt.maxLife);
+    for (let i = 0; i < bolt.points.length - 1; i++) {
+      const a = bolt.points[i];
+      const b = bolt.points[i + 1];
+      const segs = 6;
+      const jag = [];
+      for (let s2 = 0; s2 <= segs; s2++) {
+        const t = s2 / segs;
+        const jitter = s2 === 0 || s2 === segs ? 0 : (Math.random() - 0.5) * 12;
+        const nx = -(b.y - a.y);
+        const ny = b.x - a.x;
+        const len = Math.hypot(nx, ny) || 1;
+        jag.push({ x: a.x + (b.x - a.x) * t + (nx / len) * jitter, y: a.y + (b.y - a.y) * t + (ny / len) * jitter });
+      }
+      ctx.globalAlpha = frac;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#7ec8ff';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      jag.forEach((p, k) => (k === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      jag.forEach((p, k) => (k === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
 // --- Enemies: sprite composer ------------------------------------------------
 
 function drawEnemies(ctx, game, time) {
@@ -2318,6 +3002,12 @@ function drawEnemies(ctx, game, time) {
     const x = pos.x;
     const y = pos.y - bob;
     const r = enemy.radius;
+    const grow = Math.min(1, (enemy.age ?? 1) / 0.3);
+    const spawnScale = 0.4 + 0.6 * (1 - (1 - grow) * (1 - grow)); // ease-out
+    ctx.save();
+    ctx.translate(x, pos.y);
+    ctx.scale(spawnScale, spawnScale);
+    ctx.translate(-x, -pos.y);
 
     ctx.fillStyle = 'rgba(20,40,15,0.25)';
     ctx.beginPath();
@@ -2368,6 +3058,20 @@ function drawEnemies(ctx, game, time) {
     if (has('club')) drawClub(ctx, x, y, r, facing);
     if (has('stinger')) drawStinger(ctx, x, y, r, facing, time);
 
+    // Status tints: icy blue while chilled, orange while burning.
+    if (enemy.slow) {
+      ctx.fillStyle = 'rgba(143,211,255,0.4)';
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.02, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (enemy.burn) {
+      ctx.fillStyle = `rgba(255,120,40,${0.25 + Math.sin(time * 20 + enemy.id) * 0.1})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.02, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // White hit-flash overlay while enemy.flash runs down.
     if (enemy.flash > 0) {
       ctx.globalAlpha = (enemy.flash / 0.12) * 0.65;
@@ -2387,6 +3091,7 @@ function drawEnemies(ctx, game, time) {
       ctx.fillStyle = frac > 0.5 ? '#6fd64a' : frac > 0.25 ? '#e8c33a' : '#d64545';
       ctx.fillRect(x - w / 2, y - r - 9, w * frac, 3);
     }
+    ctx.restore();
   }
 }
 
@@ -2789,6 +3494,21 @@ function drawProjectiles(ctx, game) {
       ctx.beginPath();
       ctx.arc(proj.x, proj.y, 1.8, 0, Math.PI * 2);
       ctx.fill();
+    } else if (proj.towerType === 'frost') {
+      // A spinning ice shard: diamond along the flight direction.
+      const l = 7 * scale;
+      const w = 3 * scale;
+      ctx.fillStyle = 'rgba(191,233,255,0.9)';
+      ctx.strokeStyle = '#5fa8d8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(proj.x + proj.dirX * l, proj.y + proj.dirY * l);
+      ctx.lineTo(proj.x - proj.dirY * w, proj.y + proj.dirX * w);
+      ctx.lineTo(proj.x - proj.dirX * l, proj.y - proj.dirY * l);
+      ctx.lineTo(proj.x + proj.dirY * w, proj.y - proj.dirX * w);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     } else if (proj.towerType === 'mage') {
       ctx.strokeStyle = 'rgba(143,123,255,0.5)'; // trail
       ctx.lineWidth = 4 * scale;
@@ -2806,22 +3526,34 @@ function drawProjectiles(ctx, game) {
       ctx.arc(proj.x, proj.y, 3.5 * scale, 0, Math.PI * 2);
       ctx.fill();
     } else {
+      // Lob: lift the ball along a sine arc between launch and target,
+      // keeping a shadow on the ground beneath it.
+      const traveled = Math.hypot(proj.x - (proj.startX ?? proj.x), proj.y - (proj.startY ?? proj.y));
+      const remaining = Math.hypot(proj.lastTarget.x - proj.x, proj.lastTarget.y - proj.y);
+      const total = traveled + remaining || 1;
+      const lift = Math.sin((traveled / total) * Math.PI) * Math.min(42, total * 0.3);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(proj.x, proj.y + 3, 4 * scale, 2 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = '#2f3338';
       ctx.beginPath();
-      ctx.arc(proj.x, proj.y, 4.5 * scale, 0, Math.PI * 2);
+      ctx.arc(proj.x, proj.y - lift, 4.5 * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#596067';
       ctx.beginPath();
-      ctx.arc(proj.x - 1.3, proj.y - 1.3, 1.6 * scale, 0, Math.PI * 2);
+      ctx.arc(proj.x - 1.3, proj.y - lift - 1.3, 1.6 * scale, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 }
 
-function drawParticleList(ctx, particles) {
+function drawParticleList(ctx, particles, glow = false) {
   for (const p of particles) {
     const frac = Math.max(0, p.life / p.maxLife);
     ctx.globalAlpha = frac;
+    // Sparks and rings add light; smoke and scorch stay opaque.
+    ctx.globalCompositeOperation = glow && p.shape !== 'smoke' && p.shape !== 'scorch' ? 'lighter' : 'source-over';
     if (p.shape === 'ring') {
       ctx.strokeStyle = p.color;
       ctx.lineWidth = 3 * frac;
@@ -2846,6 +3578,7 @@ function drawParticleList(ctx, particles) {
       ctx.fill();
     }
   }
+  ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
 }
 
@@ -2921,8 +3654,22 @@ const PROGRESS_KEY = 'towerrush-progress';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// Render at device resolution so lines and glows stay crisp on HiDPI screens.
+function fitCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const { width, height } = game.level;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = 'auto';
+  canvas.style.aspectRatio = `${width} / ${height}`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
 let levelIndex = 0;
 let game = new Game(LEVELS[0]);
+fitCanvas();
+window.addEventListener('resize', fitCanvas);
 const effects = new Effects();
 const ui = { selectedSpot: -1 };
 
@@ -2966,7 +3713,13 @@ const levelList = document.getElementById('level-list');
 for (const type of Object.values(TOWER_TYPES)) {
   const btn = document.createElement('button');
   btn.dataset.type = type.id;
-  btn.textContent = `${type.name} (${type.levels[0].cost}g)`;
+  btn.innerHTML = `<span class="tower-name">${type.name}</span><span class="tower-cost">${type.levels[0].cost}g</span>`;
+  btn.title = type.desc;
+  btn.style.setProperty('--tower', type.color);
+  // Light tower colors need dark text.
+  const n = parseInt(type.color.slice(1), 16);
+  const luma = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  btn.style.setProperty('--tower-fg', luma > 150 ? '#1b1f2a' : '#ffffff');
   btn.addEventListener('click', () => {
     if (ui.selectedSpot < 0) return;
     const result = game.buildTower(ui.selectedSpot, type.id);
@@ -3000,8 +3753,8 @@ chooseLevelBtn.addEventListener('click', () => showLevelSelect());
 
 canvas.addEventListener('click', (event) => {
   const rect = canvas.getBoundingClientRect();
-  const x = (event.clientX - rect.left) * (canvas.width / rect.width);
-  const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+  const x = (event.clientX - rect.left) * (game.level.width / rect.width);
+  const y = (event.clientY - rect.top) * (game.level.height / rect.height);
 
   ui.selectedSpot = -1;
   game.level.buildSpots.forEach((spot, i) => {
@@ -3015,6 +3768,7 @@ canvas.addEventListener('click', (event) => {
 function loadLevel(index) {
   levelIndex = Math.min(Math.max(index, 0), LEVELS.length - 1);
   game = new Game(LEVELS[levelIndex]);
+  fitCanvas();
   effects.clear();
   ui.selectedSpot = -1;
   levelSelect.hidden = true;
@@ -3033,6 +3787,22 @@ function showLevelSelect() {
     levelList.appendChild(btn);
   });
   levelSelect.hidden = false;
+}
+
+// One line of stats for the tower info panel, per attack style.
+function describeStats(type, stats) {
+  const parts = [];
+  if (type.attack === 'beam') {
+    parts.push(`${stats.dps} ${type.damageType} dps, up to ×${stats.rampMultiplier} when held`);
+  } else {
+    parts.push(`${stats.damage} ${type.damageType} dmg`, `${(1 / stats.fireInterval).toFixed(1)}/s`);
+  }
+  parts.push(`${stats.range} range`);
+  if (stats.splashRadius) parts.push(`${stats.splashRadius} splash`);
+  if (stats.slow) parts.push(`slows ${Math.round((1 - stats.slow.factor) * 100)}% for ${stats.slow.duration}s`);
+  if (stats.burn) parts.push(`burns ${stats.burn.dps}/s for ${stats.burn.duration}s`);
+  if (stats.jumps) parts.push(`arcs to ${stats.jumps} more`);
+  return parts.join(' · ');
 }
 
 let statusTimer = null;
@@ -3067,7 +3837,7 @@ function updateHud() {
     const type = TOWER_TYPES[tower.typeId];
     const stats = game.towerStats(tower);
     const upgradeCost = game.upgradeCost(tower);
-    towerInfoEl.textContent = `${type.name} — Level ${tower.level + 1}/${MAX_TOWER_LEVEL} · ${stats.damage} ${type.damageType} dmg · ${stats.range} range · ${(1 / stats.fireInterval).toFixed(1)}/s`;
+    towerInfoEl.textContent = `${type.name} — Level ${tower.level + 1}/${MAX_TOWER_LEVEL} · ${describeStats(type, stats)}`;
     upgradeBtn.textContent = upgradeCost === null ? 'Max level' : `Upgrade (${upgradeCost}g)`;
     upgradeBtn.disabled = upgradeCost === null || game.gold < upgradeCost;
     sellBtn.textContent = `Sell (+${game.sellValue(tower)}g)`;

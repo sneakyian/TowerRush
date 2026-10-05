@@ -32,7 +32,8 @@ test('every level config is coherent', () => {
   for (const type of Object.values(TOWER_TYPES)) {
     assert.equal(type.levels.length, MAX_TOWER_LEVEL);
     for (let i = 1; i < type.levels.length; i++) {
-      assert.ok(type.levels[i].damage > type.levels[i - 1].damage, `${type.id} tier ${i + 1} should hit harder`);
+      const hit = (lvl) => lvl.damage ?? lvl.dps; // beam towers express damage per second
+      assert.ok(hit(type.levels[i]) > hit(type.levels[i - 1]), `${type.id} tier ${i + 1} should hit harder`);
       assert.ok(type.levels[i].cost > type.levels[i - 1].cost, `${type.id} tier ${i + 1} should cost more`);
     }
   }
@@ -125,8 +126,21 @@ for (const level of LEVELS) {
   });
 }
 
-test('no single tower type wins every level (armor and resistance matter)', () => {
-  for (const strategy of ['archersOnly', 'magesOnly', 'cannonsOnly']) {
+for (const level of LEVELS) {
+  test(`${level.name} is winnable with a Kingdom Rush + Radiant Defense hybrid`, () => {
+    const result = playLevel(level, { strategy: 'hybrid' });
+    assert.equal(
+      result.phase,
+      PHASE.WON,
+      `expected a win, got "${result.phase}" after ${result.wavesCleared}/${level.waves.length} waves ` +
+        `(lives lost per wave: ${result.livesLostPerWave.join(',')}; towers: ${result.towers.join(',')})`,
+    );
+    assert.ok(result.lives >= 3, `${level.name}: hybrid won with only ${result.lives} lives — too tight`);
+  });
+}
+
+test('no single tower type wins every level (armor, resistance, and mechanics matter)', () => {
+  for (const strategy of ['archersOnly', 'magesOnly', 'cannonsOnly', 'frostOnly', 'teslaOnly', 'flameOnly', 'laserOnly']) {
     const wins = LEVELS.filter((level) => playLevel(level, { strategy }).phase === PHASE.WON).length;
     assert.ok(wins < LEVELS.length, `${strategy} beat every level`);
   }

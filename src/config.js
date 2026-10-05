@@ -7,10 +7,13 @@
 // Archers and cannons are physical; mages are magic.
 
 export const TOWER_TYPES = {
+  // --- Kingdom Rush trio: projectile towers defined by damage type ---------
   archer: {
     id: 'archer',
     name: 'Archer Tower',
+    desc: 'Fast, cheap arrows. The backbone of any defense.',
     damageType: 'physical',
+    attack: 'projectile',
     projectileSpeed: 320,
     color: '#8d6e3a',
     // levels[0] is the base tower; `cost` is what that tier costs to reach.
@@ -23,7 +26,9 @@ export const TOWER_TYPES = {
   mage: {
     id: 'mage',
     name: 'Mage Tower',
+    desc: 'Slow magic bolts that ignore armor.',
     damageType: 'magic',
+    attack: 'projectile',
     projectileSpeed: 280,
     color: '#5a4fcf',
     levels: [
@@ -35,13 +40,76 @@ export const TOWER_TYPES = {
   cannon: {
     id: 'cannon',
     name: 'Cannon Tower',
+    desc: 'Splash damage for packed groups.',
     damageType: 'physical',
+    attack: 'projectile',
     projectileSpeed: 220,
     color: '#555b61',
     levels: [
       { cost: 125, damage: 28, range: 80, fireInterval: 1.5, splashRadius: 40 },
       { cost: 220, damage: 52, range: 90, fireInterval: 1.4, splashRadius: 48 },
       { cost: 320, damage: 92, range: 100, fireInterval: 1.3, splashRadius: 56 },
+    ],
+  },
+
+  // --- Radiant Defense quartet: towers defined by their mechanic -----------
+  frost: {
+    id: 'frost',
+    name: 'Frost Spire',
+    desc: 'Ice shards that chill enemies, slowing them down.',
+    damageType: 'magic',
+    attack: 'projectile',
+    projectileSpeed: 300,
+    color: '#8fd3ff',
+    // slow: enemy speed is multiplied by `factor` for `duration` seconds.
+    levels: [
+      { cost: 80, damage: 6, range: 95, fireInterval: 0.8, splashRadius: 0, slow: { factor: 0.55, duration: 2 } },
+      { cost: 130, damage: 12, range: 105, fireInterval: 0.75, splashRadius: 0, slow: { factor: 0.45, duration: 2.2 } },
+      { cost: 190, damage: 20, range: 115, fireInterval: 0.7, splashRadius: 0, slow: { factor: 0.35, duration: 2.5 } },
+    ],
+  },
+  tesla: {
+    id: 'tesla',
+    name: 'Tesla Coil',
+    desc: 'Lightning that arcs from enemy to enemy.',
+    damageType: 'magic',
+    attack: 'chain',
+    color: '#b9e0ff',
+    // chain: hits the target, then jumps to the nearest enemy within
+    // `chainRadius` up to `jumps` more times, losing `falloff` each jump.
+    levels: [
+      { cost: 140, damage: 22, range: 100, fireInterval: 1.2, jumps: 3, chainRadius: 70, falloff: 0.7 },
+      { cost: 230, damage: 42, range: 110, fireInterval: 1.1, jumps: 4, chainRadius: 80, falloff: 0.72 },
+      { cost: 330, damage: 70, range: 120, fireInterval: 1.0, jumps: 5, chainRadius: 90, falloff: 0.75 },
+    ],
+  },
+  flame: {
+    id: 'flame',
+    name: 'Flamethrower',
+    desc: 'Short-range fire that leaves enemies burning.',
+    damageType: 'physical',
+    attack: 'instant',
+    color: '#ff8c33',
+    // burn: `dps` damage per second for `duration` seconds after each hit.
+    levels: [
+      { cost: 110, damage: 4, range: 70, fireInterval: 0.15, burn: { dps: 6, duration: 3 } },
+      { cost: 180, damage: 8, range: 78, fireInterval: 0.15, burn: { dps: 12, duration: 3 } },
+      { cost: 260, damage: 14, range: 86, fireInterval: 0.15, burn: { dps: 20, duration: 3.5 } },
+    ],
+  },
+  laser: {
+    id: 'laser',
+    name: 'Laser Lance',
+    desc: 'A steady beam that burns hotter the longer it holds a target.',
+    damageType: 'magic',
+    attack: 'beam',
+    color: '#ff4fd8',
+    // beam: `dps` continuous damage, scaling up to `rampMultiplier` after
+    // `rampTime` seconds on the same target.
+    levels: [
+      { cost: 160, dps: 20, range: 110, rampTime: 3, rampMultiplier: 2.5 },
+      { cost: 260, dps: 40, range: 120, rampTime: 2.8, rampMultiplier: 2.7 },
+      { cost: 380, dps: 70, range: 130, rampTime: 2.5, rampMultiplier: 3 },
     ],
   },
 };

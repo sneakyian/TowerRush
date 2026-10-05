@@ -12,8 +12,22 @@ const PROGRESS_KEY = 'towerrush-progress';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
+// Render at device resolution so lines and glows stay crisp on HiDPI screens.
+function fitCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const { width, height } = game.level;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = 'auto';
+  canvas.style.aspectRatio = `${width} / ${height}`;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
 let levelIndex = 0;
 let game = new Game(LEVELS[0]);
+fitCanvas();
+window.addEventListener('resize', fitCanvas);
 const effects = new Effects();
 const ui = { selectedSpot: -1 };
 
@@ -57,7 +71,13 @@ const levelList = document.getElementById('level-list');
 for (const type of Object.values(TOWER_TYPES)) {
   const btn = document.createElement('button');
   btn.dataset.type = type.id;
-  btn.textContent = `${type.name} (${type.levels[0].cost}g)`;
+  btn.innerHTML = `<span class="tower-name">${type.name}</span><span class="tower-cost">${type.levels[0].cost}g</span>`;
+  btn.title = type.desc;
+  btn.style.setProperty('--tower', type.color);
+  // Light tower colors need dark text.
+  const n = parseInt(type.color.slice(1), 16);
+  const luma = 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+  btn.style.setProperty('--tower-fg', luma > 150 ? '#1b1f2a' : '#ffffff');
   btn.addEventListener('click', () => {
     if (ui.selectedSpot < 0) return;
     const result = game.buildTower(ui.selectedSpot, type.id);
@@ -91,8 +111,8 @@ chooseLevelBtn.addEventListener('click', () => showLevelSelect());
 
 canvas.addEventListener('click', (event) => {
   const rect = canvas.getBoundingClientRect();
-  const x = (event.clientX - rect.left) * (canvas.width / rect.width);
-  const y = (event.clientY - rect.top) * (canvas.height / rect.height);
+  const x = (event.clientX - rect.left) * (game.level.width / rect.width);
+  const y = (event.clientY - rect.top) * (game.level.height / rect.height);
 
   ui.selectedSpot = -1;
   game.level.buildSpots.forEach((spot, i) => {
@@ -106,6 +126,7 @@ canvas.addEventListener('click', (event) => {
 function loadLevel(index) {
   levelIndex = Math.min(Math.max(index, 0), LEVELS.length - 1);
   game = new Game(LEVELS[levelIndex]);
+  fitCanvas();
   effects.clear();
   ui.selectedSpot = -1;
   levelSelect.hidden = true;
@@ -124,6 +145,22 @@ function showLevelSelect() {
     levelList.appendChild(btn);
   });
   levelSelect.hidden = false;
+}
+
+// One line of stats for the tower info panel, per attack style.
+function describeStats(type, stats) {
+  const parts = [];
+  if (type.attack === 'beam') {
+    parts.push(`${stats.dps} ${type.damageType} dps, up to ×${stats.rampMultiplier} when held`);
+  } else {
+    parts.push(`${stats.damage} ${type.damageType} dmg`, `${(1 / stats.fireInterval).toFixed(1)}/s`);
+  }
+  parts.push(`${stats.range} range`);
+  if (stats.splashRadius) parts.push(`${stats.splashRadius} splash`);
+  if (stats.slow) parts.push(`slows ${Math.round((1 - stats.slow.factor) * 100)}% for ${stats.slow.duration}s`);
+  if (stats.burn) parts.push(`burns ${stats.burn.dps}/s for ${stats.burn.duration}s`);
+  if (stats.jumps) parts.push(`arcs to ${stats.jumps} more`);
+  return parts.join(' · ');
 }
 
 let statusTimer = null;
@@ -158,7 +195,7 @@ function updateHud() {
     const type = TOWER_TYPES[tower.typeId];
     const stats = game.towerStats(tower);
     const upgradeCost = game.upgradeCost(tower);
-    towerInfoEl.textContent = `${type.name} — Level ${tower.level + 1}/${MAX_TOWER_LEVEL} · ${stats.damage} ${type.damageType} dmg · ${stats.range} range · ${(1 / stats.fireInterval).toFixed(1)}/s`;
+    towerInfoEl.textContent = `${type.name} — Level ${tower.level + 1}/${MAX_TOWER_LEVEL} · ${describeStats(type, stats)}`;
     upgradeBtn.textContent = upgradeCost === null ? 'Max level' : `Upgrade (${upgradeCost}g)`;
     upgradeBtn.disabled = upgradeCost === null || game.gold < upgradeCost;
     sellBtn.textContent = `Sell (+${game.sellValue(tower)}g)`;

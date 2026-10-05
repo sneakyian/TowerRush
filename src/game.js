@@ -94,7 +94,7 @@ export class Game {
     }
 
     this.gold -= cost;
-    this.towers[spotIndex] = { typeId, level: 0, cooldown: 0, invested: cost };
+    this.towers[spotIndex] = { typeId, level: 0, cooldown: 0, invested: cost, age: 0 };
     const spot = this.level.buildSpots[spotIndex];
     this.pushEvent({ type: 'tower-built', x: spot.x, y: spot.y, towerType: typeId });
     return { ok: true };
@@ -113,6 +113,7 @@ export class Game {
     this.gold -= cost;
     tower.level += 1;
     tower.invested += cost;
+    tower.age = 0;
     const spot = this.level.buildSpots[spotIndex];
     this.pushEvent({ type: 'tower-upgraded', x: spot.x, y: spot.y, towerType: tower.typeId, level: tower.level + 1 });
     return { ok: true, level: tower.level + 1 };
@@ -179,6 +180,9 @@ export class Game {
         dist: 0,
         alive: true,
         flash: 0, // seconds of white hit-flash left, for rendering
+        slow: null, // { factor, remaining } while chilled
+        burn: null, // { dps, remaining, damageType } while burning
+        age: 0, // seconds since spawning, for the renderer
       });
       const pos = this.path.positionAt(0);
       this.pushEvent({ type: 'enemy-spawned', x: pos.x, y: pos.y, enemyType: typeId });
@@ -190,7 +194,18 @@ export class Game {
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       enemy.flash = Math.max(0, (enemy.flash || 0) - dt);
-      enemy.dist += enemy.speed * dt;
+      enemy.age = (enemy.age || 0) + dt;
+      if (enemy.slow) {
+        enemy.slow.remaining -= dt;
+        if (enemy.slow.remaining <= 0) enemy.slow = null;
+      }
+      if (enemy.burn) {
+        this.damageEnemy(enemy, enemy.burn.dps * dt, enemy.burn.damageType, { flash: false });
+        enemy.burn.remaining -= dt;
+        if (enemy.burn.remaining <= 0) enemy.burn = null;
+        if (!enemy.alive) continue;
+      }
+      enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
         enemy.leaked = true;
@@ -206,36 +221,130 @@ export class Game {
     for (let i = 0; i < this.towers.length; i++) {
       const tower = this.towers[i];
       if (!tower) continue;
-      tower.cooldown = Math.max(0, tower.cooldown - dt);
-      if (tower.cooldown > 0) continue;
-
       const type = this.towerTypes[tower.typeId];
       const stats = this.towerStats(tower);
       const spot = this.level.buildSpots[i];
+      const attack = type.attack || 'projectile';
+      tower.age = (tower.age || 0) + dt; // seconds since built/upgraded, for the renderer
+
+      if (attack === 'beam') {
+        this.updateBeam(tower, type, stats, spot, dt);
+        continue;
+      }
+
+      tower.cooldown = Math.max(0, tower.cooldown - dt);
+      if (tower.cooldown > 0) continue;
       const target = this.findTarget(spot, stats.range);
       if (!target) continue;
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
-      this.projectiles.push({
-        x: spot.x,
-        y: spot.y,
-        prevX: spot.x,
-        prevY: spot.y,
-        targetId: target.id,
-        lastTarget: pos,
-        speed: type.projectileSpeed,
-        damage: stats.damage,
-        damageType: type.damageType,
-        splashRadius: stats.splashRadius,
-        color: type.color,
-        towerType: tower.typeId,
-        towerLevel: tower.level,
-        dirX: 0,
-        dirY: 0,
-      });
       tower.cooldown = stats.fireInterval;
       this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level });
+
+      if (attack === 'projectile') {
+        this.projectiles.push({
+          x: spot.x,
+          y: spot.y,
+          startX: spot.x,
+          startY: spot.y,
+          prevX: spot.x,
+          prevY: spot.y,
+          targetId: target.id,
+          lastTarget: pos,
+          speed: type.projectileSpeed,
+          damage: stats.damage,
+          damageType: type.damageType,
+          splashRadius: stats.splashRadius,
+          slow: stats.slow || null,
+          color: type.color,
+          towerType: tower.typeId,
+          towerLevel: tower.level,
+          dirX: 0,
+          dirY: 0,
+        });
+      } else if (attack === 'instant') {
+        this.damageEnemy(target, stats.damage, type.damageType);
+        if (stats.burn) this.applyBurn(target, stats.burn, type.damageType);
+        this.pushEvent({ type: 'hit', x: pos.x, y: pos.y, towerType: tower.typeId, level: tower.level, splash: 0 });
+      } else if (attack === 'chain') {
+        this.chainLightning(spot, target, stats, type, tower);
+      }
+    }
+  }
+
+  // Lightning hits the target, then arcs to the nearest untouched enemy
+  // within chainRadius, losing damage with every jump.
+  chainLightning(spot, target, stats, type, tower) {
+    const points = [{ x: spot.x, y: spot.y - 26 }];
+    const struck = new Set();
+    let current = target;
+    let damage = stats.damage;
+    for (let jump = 0; jump <= stats.jumps && current; jump++) {
+      const pos = this.path.positionAt(current.dist);
+      points.push(pos);
+      struck.add(current.id);
+      this.damageEnemy(current, damage, type.damageType);
+      damage *= stats.falloff;
+      let next = null;
+      let best = Infinity;
+      for (const enemy of this.enemies) {
+        if (!enemy.alive || struck.has(enemy.id)) continue;
+        const p = this.path.positionAt(enemy.dist);
+        const d = Math.hypot(p.x - pos.x, p.y - pos.y);
+        if (d <= stats.chainRadius && d < best) {
+          best = d;
+          next = enemy;
+        }
+      }
+      current = next;
+    }
+    this.pushEvent({ type: 'zap', points, towerType: tower.typeId, level: tower.level });
+  }
+
+  // A beam stays on its target while it can and ramps up the longer it holds.
+  updateBeam(tower, type, stats, spot, dt) {
+    let target = this.enemies.find((e) => e.id === tower.beamTargetId && e.alive) || null;
+    if (target) {
+      const pos = this.path.positionAt(target.dist);
+      if (Math.hypot(pos.x - spot.x, pos.y - spot.y) > stats.range) target = null;
+    }
+    if (!target) {
+      target = this.findTarget(spot, stats.range);
+      tower.beamTargetId = target ? target.id : null;
+      tower.beamTime = 0;
+    }
+    if (!target) return;
+
+    tower.beamTime += dt;
+    const ramp = Math.min(1, tower.beamTime / stats.rampTime);
+    const multiplier = 1 + (stats.rampMultiplier - 1) * ramp;
+    const pos = this.path.positionAt(target.dist);
+    tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
+    this.damageEnemy(target, stats.dps * multiplier * dt, type.damageType, { flash: false });
+  }
+
+  // Current damage multiplier of a beam tower, for the HUD and renderer.
+  beamMultiplier(tower) {
+    const stats = this.towerStats(tower);
+    if (!tower.beamTargetId || !stats.rampTime) return 1;
+    return 1 + (stats.rampMultiplier - 1) * Math.min(1, (tower.beamTime || 0) / stats.rampTime);
+  }
+
+  applySlow(enemy, slow) {
+    // A stronger or fresher chill replaces a weaker one; never stacks.
+    if (!enemy.slow || slow.factor <= enemy.slow.factor) {
+      enemy.slow = { factor: slow.factor, remaining: slow.duration };
+    } else {
+      enemy.slow.remaining = Math.max(enemy.slow.remaining, slow.duration);
+    }
+  }
+
+  applyBurn(enemy, burn, damageType) {
+    if (!enemy.burn || burn.dps >= enemy.burn.dps) {
+      enemy.burn = { dps: burn.dps, remaining: burn.duration, damageType };
+    } else {
+      enemy.burn.remaining = Math.max(enemy.burn.remaining, burn.duration);
     }
   }
 
@@ -297,17 +406,20 @@ export class Game {
         const pos = this.path.positionAt(enemy.dist);
         if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
           this.damageEnemy(enemy, proj.damage, proj.damageType);
+          if (proj.slow) this.applySlow(enemy, proj.slow);
         }
       }
     } else if (directTarget) {
       this.damageEnemy(directTarget, proj.damage, proj.damageType);
+      if (proj.slow) this.applySlow(directTarget, proj.slow);
     }
   }
 
-  damageEnemy(enemy, amount, damageType = 'physical') {
+  damageEnemy(enemy, amount, damageType = 'physical', { flash = true } = {}) {
+    if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
     enemy.hp -= effectiveDamage(amount, damageType, type);
-    enemy.flash = 0.12;
+    if (flash) enemy.flash = 0.12;
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;

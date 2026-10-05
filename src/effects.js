@@ -19,6 +19,7 @@ export class Effects {
     this.texts = [];           // {x,y,text,color,life,maxLife}
     this.banner = null;        // {text,color,life,maxLife}
     this.scheduled = [];       // [{delay, x, y, kind}] future bursts
+    this.bolts = [];           // [{points, life, maxLife}] lightning arcs
     this.dustTimer = 0;        // throttles ambient footstep dust
   }
 
@@ -28,6 +29,7 @@ export class Effects {
     this.texts = [];
     this.banner = null;
     this.scheduled = [];
+    this.bolts = [];
   }
 
   // Turn gameplay events (from Game.drainEvents()) into visual effects.
@@ -39,6 +41,9 @@ export class Effects {
           break;
         case 'hit':
           this.spawnImpact(event);
+          break;
+        case 'zap':
+          this.spawnLightning(event);
           break;
         case 'enemy-died':
           this.spawnDeath(event);
@@ -96,8 +101,61 @@ export class Effects {
         });
       }
     }
+    for (const enemy of game.enemies) {
+      if (!enemy.alive) continue;
+      if (enemy.burn && Math.random() < dt * 14) {
+        const pos = game.path.positionAt(enemy.dist);
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius * 0.6, enemy.radius * 0.6),
+          y: pos.y - enemy.radius * 0.5,
+          vx: rand(-10, 10),
+          vy: rand(-55, -25),
+          life: rand(0.3, 0.55),
+          size: rand(1.5, 3),
+          color: Math.random() < 0.5 ? '#ff9f45' : '#ffd97a',
+        });
+      }
+      if (enemy.slow && Math.random() < dt * 8) {
+        const pos = game.path.positionAt(enemy.dist);
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius, enemy.radius),
+          y: pos.y + rand(-enemy.radius, enemy.radius),
+          vx: rand(-6, 6),
+          vy: rand(-12, -2),
+          life: rand(0.4, 0.7),
+          size: rand(1, 2),
+          color: '#dff3ff',
+        });
+      }
+    }
+    game.towers.forEach((tower, i) => {
+      if (!tower || !tower.beamTargetId) return;
+      const target = game.enemies.find((e) => e.id === tower.beamTargetId && e.alive);
+      if (!target || Math.random() > dt * 30) return;
+      const pos = game.path.positionAt(target.dist);
+      const angle = rand(0, Math.PI * 2);
+      this.addParticle({
+        x: pos.x,
+        y: pos.y,
+        vx: Math.cos(angle) * rand(30, 90),
+        vy: Math.sin(angle) * rand(30, 90) - 20,
+        life: rand(0.15, 0.3),
+        size: rand(1, 2.2),
+        color: Math.random() < 0.5 ? '#ff4fd8' : '#ffffff',
+      });
+    });
     for (const proj of game.projectiles) {
-      if (proj.towerType === 'mage' && Math.random() < dt * 40) {
+      if (proj.towerType === 'frost' && Math.random() < dt * 30) {
+        this.addParticle({
+          x: proj.x + rand(-2, 2),
+          y: proj.y + rand(-2, 2),
+          vx: rand(-8, 8),
+          vy: rand(-8, 8),
+          life: rand(0.2, 0.35),
+          size: rand(1, 2),
+          color: '#dff3ff',
+        });
+      } else if (proj.towerType === 'mage' && Math.random() < dt * 40) {
         this.addParticle({
           x: proj.x + rand(-2, 2),
           y: proj.y + rand(-2, 2),
@@ -150,6 +208,24 @@ export class Effects {
           color: '#b9a7ff',
         });
       }
+    } else if (event.towerType === 'flame') {
+      // A burst of fire along the nozzle direction.
+      for (let i = 0; i < 4; i++) {
+        const spread = event.angle + rand(-0.3, 0.3);
+        const speed = rand(110, 180);
+        this.addParticle({
+          x: event.x + Math.cos(event.angle) * 16,
+          y: event.y - 8 + Math.sin(event.angle) * 16,
+          vx: Math.cos(spread) * speed,
+          vy: Math.sin(spread) * speed,
+          life: rand(0.18, 0.32),
+          size: rand(3, 5.5),
+          color: ['#ffd97a', '#ff9f45', '#ff6b35', '#ffe8b0'][i % 4],
+          shape: 'smoke',
+        });
+      }
+    } else if (event.towerType === 'tesla' || event.towerType === 'laser') {
+      // Handled by the bolt / beam visuals.
     } else {
       // A tiny puff of dust off the bowstring.
       this.addParticle({
@@ -213,6 +289,34 @@ export class Effects {
         color: 'rgba(40,32,22,0.55)',
         shape: 'scorch',
       });
+    } else if (event.towerType === 'frost') {
+      for (let i = 0; i < 7; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(30, 90);
+        this.addParticle({
+          x: event.x,
+          y: event.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: rand(0.25, 0.45),
+          size: rand(1.5, 3),
+          color: i % 2 ? '#8fd3ff' : '#ffffff',
+          gravity: 90,
+        });
+      }
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.25, size: 14, color: '#bfe9ff', shape: 'ring' });
+    } else if (event.towerType === 'flame') {
+      for (let i = 0; i < 2; i++) {
+        this.addParticle({
+          x: event.x + rand(-4, 4),
+          y: event.y + rand(-4, 4),
+          vx: rand(-20, 20),
+          vy: rand(-50, -20),
+          life: rand(0.2, 0.4),
+          size: rand(1.5, 2.5),
+          color: '#ffd97a',
+        });
+      }
     } else if (event.towerType === 'mage') {
       for (let i = 0; i < 10; i++) {
         const angle = rand(0, Math.PI * 2);
@@ -248,6 +352,25 @@ export class Effects {
           size: rand(1.5, 2.5),
           color: i % 2 ? '#e8e2d4' : '#c9a86a',
           gravity: 120,
+        });
+      }
+    }
+  }
+
+  spawnLightning(event) {
+    this.bolts.push({ points: event.points, life: 0.18, maxLife: 0.18 });
+    for (const p of event.points.slice(1)) {
+      for (let i = 0; i < 5; i++) {
+        const angle = rand(0, Math.PI * 2);
+        const speed = rand(40, 110);
+        this.addParticle({
+          x: p.x,
+          y: p.y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: rand(0.15, 0.3),
+          size: rand(1, 2.2),
+          color: i % 2 ? '#dff3ff' : '#7ec8ff',
         });
       }
     }
@@ -434,6 +557,9 @@ export class Effects {
       this.banner.life -= dt;
       if (this.banner.life <= 0) this.banner = null;
     }
+
+    for (const b of this.bolts) b.life -= dt;
+    this.bolts = this.bolts.filter((b) => b.life > 0);
 
     for (const s of this.scheduled) {
       s.delay -= dt;

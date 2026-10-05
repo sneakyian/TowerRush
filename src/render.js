@@ -24,9 +24,12 @@ function mulberry32(seed) {
 
 export function render(ctx, game, effects, ui, time) {
   const { level } = game;
-  const scene = getScene(game);
+  // The canvas may be scaled for high-DPI screens; terrain is prerendered at
+  // the same scale so it stays crisp.
+  const dpr = ctx.getTransform().a || 1;
+  const scene = getScene(game, dpr);
   ctx.clearRect(0, 0, level.width, level.height);
-  ctx.drawImage(scene.terrain, 0, 0);
+  ctx.drawImage(scene.terrain, 0, 0, level.width, level.height);
 
   drawWaterAnimation(ctx, level, time);
   drawParticleList(ctx, effects.groundParticles);
@@ -35,8 +38,11 @@ export function render(ctx, game, effects, ui, time) {
   drawTowers(ctx, game, ui, time);
   drawEnemies(ctx, game, time);
   drawProjectiles(ctx, game);
+  drawBeams(ctx, game, time);
+  drawBolts(ctx, effects.bolts);
   drawCloudShadows(ctx, scene.clouds, level, time);
-  drawParticleList(ctx, effects.particles);
+  drawParticleList(ctx, effects.particles, true);
+  drawVignette(ctx, scene.vignette, level);
   drawTexts(ctx, effects);
   drawBossBar(ctx, game);
   drawBanner(ctx, effects, level);
@@ -44,16 +50,17 @@ export function render(ctx, game, effects, ui, time) {
 
 // --- Scene setup (once per level) -----------------------------------------
 
-function getScene(game) {
-  if (sceneCache && sceneCache.level === game.level) return sceneCache;
+function getScene(game, dpr) {
+  if (sceneCache && sceneCache.level === game.level && sceneCache.dpr === dpr) return sceneCache;
   const { level } = game;
   const { theme } = level;
   const rng = mulberry32(42);
 
   const terrain = document.createElement('canvas');
-  terrain.width = level.width;
-  terrain.height = level.height;
+  terrain.width = Math.round(level.width * dpr);
+  terrain.height = Math.round(level.height * dpr);
   const ctx = terrain.getContext('2d');
+  ctx.scale(dpr, dpr);
 
   // Ground with soft mottling.
   const ground = ctx.createLinearGradient(0, 0, 0, level.height);
@@ -94,8 +101,28 @@ function getScene(game) {
 
   const decor = placeDecorations(game, rng);
   const clouds = makeClouds(level, rng);
-  sceneCache = { level, terrain, decor, clouds };
+  const vignette = makeVignette(level, dpr);
+  sceneCache = { level, dpr, terrain, decor, clouds, vignette };
   return sceneCache;
+}
+
+// Soft darkening toward the edges, prerendered once; gives the map depth.
+function makeVignette(level, dpr) {
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(level.width * dpr);
+  canvas.height = Math.round(level.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const g = ctx.createRadialGradient(level.width / 2, level.height / 2, level.height * 0.45, level.width / 2, level.height / 2, level.width * 0.72);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, 'rgba(10,8,20,0.42)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, level.width, level.height);
+  return canvas;
+}
+
+function drawVignette(ctx, vignette, level) {
+  ctx.drawImage(vignette, 0, 0, level.width, level.height);
 }
 
 function tracePath(ctx, waypoints) {
@@ -227,6 +254,7 @@ function drawWaterAnimation(ctx, level, time) {
     ctx.ellipse(w.x, w.y, w.rx, w.ry, 0, 0, Math.PI * 2);
     ctx.clip();
 
+    ctx.globalCompositeOperation = 'lighter';
     if (theme.lava) {
       // Slow brightness pulse over the whole pool.
       ctx.fillStyle = `rgba(255,200,80,${0.08 + Math.sin(time * 1.3 + w.x) * 0.06})`;
@@ -262,6 +290,7 @@ function drawWaterAnimation(ctx, level, time) {
       ctx.stroke();
     }
     ctx.restore();
+    ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   }
 }
@@ -602,10 +631,21 @@ function drawTowers(ctx, game, ui, time) {
     if (i === ui.selectedSpot) drawRange(ctx, spot, stats.range);
 
     drawPlatform(ctx, spot, tower.level);
-    const justFired = tower.cooldown > stats.fireInterval - 0.12;
+    const age = tower.age ?? 1;
+    const pop = age < 0.45 ? 1 + 0.35 * Math.sin((age / 0.45) * Math.PI) * (1 - age / 0.45) : 1;
+    ctx.save();
+    ctx.translate(spot.x, spot.y + 2);
+    ctx.scale(pop, pop);
+    ctx.translate(-spot.x, -(spot.y + 2));
+    const justFired = stats.fireInterval ? tower.cooldown > stats.fireInterval - 0.12 : !!tower.beamTargetId;
     if (tower.typeId === 'archer') drawArcherTower(ctx, spot, time, justFired, tower.level);
     else if (tower.typeId === 'mage') drawMageTower(ctx, spot, time, justFired, tower.level);
-    else drawCannonTower(ctx, spot, tower.angle ?? 0, tower.cooldown / stats.fireInterval, tower.level);
+    else if (tower.typeId === 'cannon') drawCannonTower(ctx, spot, tower.angle ?? 0, tower.cooldown / stats.fireInterval, tower.level);
+    else if (tower.typeId === 'frost') drawFrostTower(ctx, spot, time, justFired, tower.level);
+    else if (tower.typeId === 'tesla') drawTeslaTower(ctx, spot, time, justFired, tower.level);
+    else if (tower.typeId === 'flame') drawFlameTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
+    else if (tower.typeId === 'laser') drawLaserTower(ctx, spot, time, tower.angle ?? 0, tower.beamTargetId ? game.beamMultiplier(tower) : 0, tower.level);
+    ctx.restore();
 
     // Level pips.
     ctx.fillStyle = '#ffd700';
@@ -900,6 +940,297 @@ function drawCannonTower(ctx, spot, angle, cooldownFrac, level) {
   }
 }
 
+function drawFrostTower(ctx, spot, time, justFired, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 30 + level * 5;
+  // Icy base ring.
+  ctx.fillStyle = 'rgba(191,233,255,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 2, 13 + level, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Crystal obelisk with inner glow.
+  const glow = 0.55 + Math.sin(time * 3) * 0.15 + (justFired ? 0.3 : 0);
+  ctx.fillStyle = `rgba(143,211,255,${glow})`;
+  ctx.strokeStyle = '#5fa8d8';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h);
+  ctx.lineTo(x + 8 + level, y - 10);
+  ctx.lineTo(x + 4, y + 3);
+  ctx.lineTo(x - 4, y + 3);
+  ctx.lineTo(x - 8 - level, y - 10);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; // facet highlight
+  ctx.beginPath();
+  ctx.moveTo(x - 1, y - h + 4);
+  ctx.lineTo(x - 5 - level * 0.5, y - 10);
+  ctx.lineTo(x - 2, y - 2);
+  ctx.closePath();
+  ctx.fill();
+  // Smaller side crystals on higher tiers.
+  for (let c = 0; c < level; c++) {
+    const side = c === 0 ? -1 : 1;
+    ctx.fillStyle = `rgba(191,233,255,${glow})`;
+    ctx.beginPath();
+    ctx.moveTo(x + side * 11, y - 16 - c * 2);
+    ctx.lineTo(x + side * 15, y - 2);
+    ctx.lineTo(x + side * 7, y - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  // Drifting ice motes.
+  ctx.fillStyle = '#ffffff';
+  for (let m = 0; m < 2 + level; m++) {
+    const a = time * 1.6 + (m / (2 + level)) * Math.PI * 2;
+    ctx.globalAlpha = 0.6 + Math.sin(time * 4 + m) * 0.3;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * (12 + level * 2), y - 14 + Math.sin(a) * 6, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawTeslaTower(ctx, spot, time, justFired, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 28 + level * 5;
+  // Dark iron base block.
+  ctx.fillStyle = '#3b4046';
+  ctx.strokeStyle = '#1f2327';
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(x - 9, y - 8, 18, 12);
+  ctx.strokeRect(x - 9, y - 8, 18, 12);
+  // Central rod with copper rings.
+  ctx.strokeStyle = '#6d747b';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 8);
+  ctx.lineTo(x, y - h);
+  ctx.stroke();
+  ctx.strokeStyle = '#c47a3a';
+  ctx.lineWidth = 3;
+  for (let r = 0; r < 2 + level; r++) {
+    const ry = y - 12 - r * ((h - 14) / (2 + level));
+    ctx.beginPath();
+    ctx.ellipse(x, ry, 7 + (level - r) * 0.5, 2.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Charged sphere with flickering arcs.
+  const charge = 0.5 + Math.sin(time * 9) * 0.2 + (justFired ? 0.4 : 0);
+  ctx.fillStyle = `rgba(126,200,255,${charge * 0.4})`;
+  ctx.beginPath();
+  ctx.arc(x, y - h - 4, 11 + level, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#9aa1a8';
+  ctx.strokeStyle = '#5c6186';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y - h - 4, 6 + level * 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(223,243,255,${charge})`;
+  ctx.lineWidth = 1.2;
+  for (let a = 0; a < 2 + level; a++) {
+    const ang = time * 7 + a * 2.1;
+    const len = 8 + Math.sin(time * 23 + a) * 3;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(ang) * 5, y - h - 4 + Math.sin(ang) * 5);
+    ctx.lineTo(x + Math.cos(ang + 0.4) * (5 + len * 0.5), y - h - 4 + Math.sin(ang + 0.4) * (5 + len * 0.5));
+    ctx.lineTo(x + Math.cos(ang) * (5 + len), y - h - 4 + Math.sin(ang) * (5 + len));
+    ctx.stroke();
+  }
+}
+
+function drawFlameTower(ctx, spot, time, angle, justFired, level) {
+  const x = spot.x;
+  const y = spot.y - 8;
+  // Brass fuel tank.
+  ctx.fillStyle = ['#b8863a', '#c4903a', '#d09a3a'][level];
+  ctx.strokeStyle = '#6e4e1e';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x - 11 - level, y - 12 - level, 22 + level * 2, 18 + level, 6);
+  ctx.strokeStyle = 'rgba(110,78,30,0.6)'; // tank bands
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 10, y - 5);
+  ctx.lineTo(x + 10, y - 5);
+  ctx.moveTo(x - 10, y + 1);
+  ctx.lineTo(x + 10, y + 1);
+  ctx.stroke();
+  // Pressure gauge.
+  ctx.fillStyle = '#eee6c8';
+  ctx.beginPath();
+  ctx.arc(x - 5, y - 6, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#b8403a';
+  ctx.beginPath();
+  ctx.moveTo(x - 5, y - 6);
+  ctx.lineTo(x - 5 + Math.cos(time * 2) * 2, y - 6 + Math.sin(time * 2) * 2);
+  ctx.stroke();
+  // Nozzle aimed at the target.
+  const nx = x + Math.cos(angle) * 14;
+  const ny = y - 2 + Math.sin(angle) * 14;
+  ctx.strokeStyle = '#3b4046';
+  ctx.lineWidth = 5 + level;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 2);
+  ctx.lineTo(nx, ny);
+  ctx.stroke();
+  // Pilot flame at the nozzle, bigger while firing.
+  const f = (justFired ? 7 : 3) + Math.sin(time * 25) * 1.2;
+  ctx.fillStyle = '#ff9f45';
+  ctx.beginPath();
+  ctx.arc(nx + Math.cos(angle) * 3, ny + Math.sin(angle) * 3, f, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffe08a';
+  ctx.beginPath();
+  ctx.arc(nx + Math.cos(angle) * 3, ny + Math.sin(angle) * 3, f * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  if (level >= 2) {
+    // Twin side tanks on the top tier.
+    ctx.fillStyle = '#9b7030';
+    ctx.strokeStyle = '#6e4e1e';
+    ctx.lineWidth = 1;
+    roundRect(ctx, x - 17, y - 8, 5, 12, 2.5);
+    roundRect(ctx, x + 12, y - 8, 5, 12, 2.5);
+  }
+}
+
+function drawLaserTower(ctx, spot, time, angle, multiplier, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 26 + level * 5;
+  // Sleek dark pillar with a pink seam.
+  ctx.fillStyle = '#2b2634';
+  ctx.strokeStyle = '#15121b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 8 - level, y + 4);
+  ctx.lineTo(x - 5, y - h);
+  ctx.lineTo(x + 5, y - h);
+  ctx.lineTo(x + 8 + level, y + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  const hot = multiplier > 0 ? 0.5 + (multiplier - 1) / 4 : 0.25 + Math.sin(time * 2) * 0.1;
+  ctx.strokeStyle = `rgba(255,79,216,${hot})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y + 2);
+  ctx.lineTo(x, y - h + 4);
+  ctx.stroke();
+  // Emitter head swivels toward the target.
+  const hy = y - h - 4;
+  ctx.fillStyle = '#4a4458';
+  ctx.strokeStyle = '#15121b';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, hy, 7 + level, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#8a7fa0';
+  ctx.lineWidth = 4 + level;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, hy);
+  ctx.lineTo(x + Math.cos(angle) * (10 + level), hy + Math.sin(angle) * (10 + level));
+  ctx.stroke();
+  // Lens glow scales with how hot the beam is running.
+  ctx.fillStyle = `rgba(255,79,216,${Math.min(1, hot + 0.2)})`;
+  ctx.beginPath();
+  ctx.arc(x + Math.cos(angle) * (11 + level), hy + Math.sin(angle) * (11 + level), 2.5 + hot * 2, 0, Math.PI * 2);
+  ctx.fill();
+  if (level >= 1) {
+    // Cooling fins.
+    ctx.strokeStyle = '#5c5570';
+    ctx.lineWidth = 1.5;
+    for (const fy of [-10, -16, -22]) {
+      ctx.beginPath();
+      ctx.moveTo(x - 9 - level, y + fy);
+      ctx.lineTo(x - 5, y + fy);
+      ctx.moveTo(x + 5, y + fy);
+      ctx.lineTo(x + 9 + level, y + fy);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawBeams(ctx, game, time) {
+  ctx.globalCompositeOperation = 'lighter';
+  game.towers.forEach((tower, i) => {
+    if (!tower || !tower.beamTargetId) return;
+    const target = game.enemies.find((e) => e.id === tower.beamTargetId && e.alive);
+    if (!target) return;
+    const spot = game.level.buildSpots[i];
+    const pos = game.path.positionAt(target.dist);
+    const h = 26 + tower.level * 5 + 4;
+    const mult = game.beamMultiplier(tower);
+    const stats = game.towerStats(tower);
+    const heat = (mult - 1) / (stats.rampMultiplier - 1);
+    const sx = spot.x + Math.cos(tower.angle) * (11 + tower.level);
+    const sy = spot.y - h + Math.sin(tower.angle) * (11 + tower.level);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = `rgba(255,79,216,${0.25 + heat * 0.25})`;
+    ctx.lineWidth = 6 + heat * 6 + Math.sin(time * 30) * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.strokeStyle = heat > 0.8 ? '#ffffff' : '#ffb3ec';
+    ctx.lineWidth = 1.5 + heat * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + heat * 0.4})`;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 3 + heat * 4 + Math.sin(time * 40) * 1, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawBolts(ctx, bolts) {
+  ctx.globalCompositeOperation = 'lighter';
+  for (const bolt of bolts) {
+    const frac = Math.max(0, bolt.life / bolt.maxLife);
+    for (let i = 0; i < bolt.points.length - 1; i++) {
+      const a = bolt.points[i];
+      const b = bolt.points[i + 1];
+      const segs = 6;
+      const jag = [];
+      for (let s2 = 0; s2 <= segs; s2++) {
+        const t = s2 / segs;
+        const jitter = s2 === 0 || s2 === segs ? 0 : (Math.random() - 0.5) * 12;
+        const nx = -(b.y - a.y);
+        const ny = b.x - a.x;
+        const len = Math.hypot(nx, ny) || 1;
+        jag.push({ x: a.x + (b.x - a.x) * t + (nx / len) * jitter, y: a.y + (b.y - a.y) * t + (ny / len) * jitter });
+      }
+      ctx.globalAlpha = frac;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#7ec8ff';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      jag.forEach((p, k) => (k === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      jag.forEach((p, k) => (k === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+}
+
 // --- Enemies: sprite composer ------------------------------------------------
 
 function drawEnemies(ctx, game, time) {
@@ -919,6 +1250,12 @@ function drawEnemies(ctx, game, time) {
     const x = pos.x;
     const y = pos.y - bob;
     const r = enemy.radius;
+    const grow = Math.min(1, (enemy.age ?? 1) / 0.3);
+    const spawnScale = 0.4 + 0.6 * (1 - (1 - grow) * (1 - grow)); // ease-out
+    ctx.save();
+    ctx.translate(x, pos.y);
+    ctx.scale(spawnScale, spawnScale);
+    ctx.translate(-x, -pos.y);
 
     ctx.fillStyle = 'rgba(20,40,15,0.25)';
     ctx.beginPath();
@@ -969,6 +1306,20 @@ function drawEnemies(ctx, game, time) {
     if (has('club')) drawClub(ctx, x, y, r, facing);
     if (has('stinger')) drawStinger(ctx, x, y, r, facing, time);
 
+    // Status tints: icy blue while chilled, orange while burning.
+    if (enemy.slow) {
+      ctx.fillStyle = 'rgba(143,211,255,0.4)';
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.02, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (enemy.burn) {
+      ctx.fillStyle = `rgba(255,120,40,${0.25 + Math.sin(time * 20 + enemy.id) * 0.1})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.02, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // White hit-flash overlay while enemy.flash runs down.
     if (enemy.flash > 0) {
       ctx.globalAlpha = (enemy.flash / 0.12) * 0.65;
@@ -988,6 +1339,7 @@ function drawEnemies(ctx, game, time) {
       ctx.fillStyle = frac > 0.5 ? '#6fd64a' : frac > 0.25 ? '#e8c33a' : '#d64545';
       ctx.fillRect(x - w / 2, y - r - 9, w * frac, 3);
     }
+    ctx.restore();
   }
 }
 
@@ -1390,6 +1742,21 @@ function drawProjectiles(ctx, game) {
       ctx.beginPath();
       ctx.arc(proj.x, proj.y, 1.8, 0, Math.PI * 2);
       ctx.fill();
+    } else if (proj.towerType === 'frost') {
+      // A spinning ice shard: diamond along the flight direction.
+      const l = 7 * scale;
+      const w = 3 * scale;
+      ctx.fillStyle = 'rgba(191,233,255,0.9)';
+      ctx.strokeStyle = '#5fa8d8';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(proj.x + proj.dirX * l, proj.y + proj.dirY * l);
+      ctx.lineTo(proj.x - proj.dirY * w, proj.y + proj.dirX * w);
+      ctx.lineTo(proj.x - proj.dirX * l, proj.y - proj.dirY * l);
+      ctx.lineTo(proj.x + proj.dirY * w, proj.y - proj.dirX * w);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
     } else if (proj.towerType === 'mage') {
       ctx.strokeStyle = 'rgba(143,123,255,0.5)'; // trail
       ctx.lineWidth = 4 * scale;
@@ -1407,22 +1774,34 @@ function drawProjectiles(ctx, game) {
       ctx.arc(proj.x, proj.y, 3.5 * scale, 0, Math.PI * 2);
       ctx.fill();
     } else {
+      // Lob: lift the ball along a sine arc between launch and target,
+      // keeping a shadow on the ground beneath it.
+      const traveled = Math.hypot(proj.x - (proj.startX ?? proj.x), proj.y - (proj.startY ?? proj.y));
+      const remaining = Math.hypot(proj.lastTarget.x - proj.x, proj.lastTarget.y - proj.y);
+      const total = traveled + remaining || 1;
+      const lift = Math.sin((traveled / total) * Math.PI) * Math.min(42, total * 0.3);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(proj.x, proj.y + 3, 4 * scale, 2 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = '#2f3338';
       ctx.beginPath();
-      ctx.arc(proj.x, proj.y, 4.5 * scale, 0, Math.PI * 2);
+      ctx.arc(proj.x, proj.y - lift, 4.5 * scale, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = '#596067';
       ctx.beginPath();
-      ctx.arc(proj.x - 1.3, proj.y - 1.3, 1.6 * scale, 0, Math.PI * 2);
+      ctx.arc(proj.x - 1.3, proj.y - lift - 1.3, 1.6 * scale, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 }
 
-function drawParticleList(ctx, particles) {
+function drawParticleList(ctx, particles, glow = false) {
   for (const p of particles) {
     const frac = Math.max(0, p.life / p.maxLife);
     ctx.globalAlpha = frac;
+    // Sparks and rings add light; smoke and scorch stay opaque.
+    ctx.globalCompositeOperation = glow && p.shape !== 'smoke' && p.shape !== 'scorch' ? 'lighter' : 'source-over';
     if (p.shape === 'ring') {
       ctx.strokeStyle = p.color;
       ctx.lineWidth = 3 * frac;
@@ -1447,6 +1826,7 @@ function drawParticleList(ctx, particles) {
       ctx.fill();
     }
   }
+  ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
 }
 
