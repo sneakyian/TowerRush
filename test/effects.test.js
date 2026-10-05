@@ -18,6 +18,7 @@ const ENEMIES = {
 function makeGame(overrides = {}) {
   const level = {
     width: 400, height: 200, startingGold: 100, startingLives: 1, sellRefund: 0.5,
+    smoothPath: false, // mechanics tests use the raw straight path
     path: [{ x: 0, y: 0 }, { x: 300, y: 0 }],
     buildSpots: [{ x: 150, y: 30 }],
     waves: [{ entries: [{ type: 'grunt', count: 1, interval: 1 }] }],

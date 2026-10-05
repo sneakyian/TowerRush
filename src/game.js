@@ -21,7 +21,7 @@ export class Game {
     this.level = level;
     this.towerTypes = towerTypes;
     this.enemyTypes = enemyTypes;
-    this.path = new Path(level.path);
+    this.path = Path.fromLevel(level);
 
     this.gold = level.startingGold;
     this.lives = level.startingLives;

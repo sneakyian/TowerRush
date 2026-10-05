@@ -71,7 +71,7 @@ test('every level fields enemies that no other level uses', () => {
 test('every build spot sits close enough to the path for a basic archer', () => {
   const archerRange = TOWER_TYPES.archer.levels[0].range;
   for (const level of LEVELS) {
-    const path = new Path(level.path);
+    const path = Path.fromLevel(level);
     for (const spot of level.buildSpots) {
       let minDist = Infinity;
       for (let d = 0; d <= path.totalLength; d += 4) {

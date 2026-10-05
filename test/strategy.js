@@ -8,7 +8,7 @@ import { Path } from '../src/path.js';
 
 // Spot indices ordered by how close each sits to the path (closest first).
 export function spotsByPathDistance(level) {
-  const path = new Path(level.path);
+  const path = Path.fromLevel(level);
   const dist = (spot) => {
     let min = Infinity;
     for (let d = 0; d <= path.totalLength; d += 6) {

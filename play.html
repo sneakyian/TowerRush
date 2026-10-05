@@ -258,7 +258,7 @@ const ENEMY_TYPES = {
     look: { body: 'round', features: ['tusks', 'club', 'pads'] },
   },
   hydra: {
-    id: 'hydra', name: 'Hydra', hp: 2600, speed: 30, bounty: 700, radius: 23,
+    id: 'hydra', name: 'Hydra', hp: 2000, speed: 30, bounty: 700, radius: 23,
     armor: 0.35, magicResist: 0.4, color: '#3f8a5a', boss: true,
     look: { body: 'big', features: ['horns', 'spikes', 'tusks', 'crown', 'glow'] },
   },
@@ -313,8 +313,8 @@ const LEVELS = [
       { x: 640, y: 110 }, { x: 820, y: 110 },
     ],
     buildSpots: [
-      { x: 120, y: 168 }, { x: 259, y: 146 }, { x: 150, y: 337 }, { x: 296, y: 320 },
-      { x: 470, y: 332 }, { x: 480, y: 428 }, { x: 613, y: 224 }, { x: 700, y: 158 },
+      { x: 120, y: 158 }, { x: 269, y: 140 }, { x: 145, y: 340 }, { x: 294, y: 330 },
+      { x: 473, y: 324 }, { x: 480, y: 428 }, { x: 613, y: 224 }, { x: 700, y: 151 },
     ],
     water: [{ x: 700, y: 400, rx: 65, ry: 36 }],
     theme: {
@@ -349,8 +349,8 @@ const LEVELS = [
       { x: 700, y: 200 }, { x: 820, y: 200 },
     ],
     buildSpots: [
-      { x: 92, y: 160 }, { x: 230, y: 192 }, { x: 230, y: 288 }, { x: 420, y: 158 },
-      { x: 472, y: 300 }, { x: 568, y: 220 }, { x: 470, y: 62 }, { x: 748, y: 280 },
+      { x: 74, y: 160 }, { x: 229, y: 171 }, { x: 225, y: 270 }, { x: 420, y: 137 },
+      { x: 456, y: 303 }, { x: 546, y: 218 }, { x: 471, y: 43 }, { x: 762, y: 280 },
     ],
     water: [{ x: 600, y: 430, rx: 95, ry: 38 }, { x: 80, y: 400, rx: 55, ry: 30 }],
     theme: {
@@ -387,8 +387,8 @@ const LEVELS = [
       { x: 820, y: 100 },
     ],
     buildSpots: [
-      { x: 60, y: 352 }, { x: 215, y: 237 }, { x: 300, y: 128 }, { x: 462, y: 125 },
-      { x: 353, y: 278 }, { x: 560, y: 372 }, { x: 745, y: 186 }, { x: 619, y: 137 },
+      { x: 60, y: 360 }, { x: 229, y: 229 }, { x: 300, y: 108 }, { x: 455, y: 134 },
+      { x: 353, y: 278 }, { x: 561, y: 393 }, { x: 742, y: 177 }, { x: 616, y: 134 },
     ],
     water: [{ x: 560, y: 230, rx: 48, ry: 28 }],
     theme: {
@@ -425,8 +425,8 @@ const LEVELS = [
       { x: 700, y: 340 }, { x: 820, y: 340 },
     ],
     buildSpots: [
-      { x: 120, y: 170 }, { x: 260, y: 188 }, { x: 260, y: 92 }, { x: 429, y: 214 },
-      { x: 470, y: 332 }, { x: 667, y: 375 }, { x: 629, y: 222 }, { x: 760, y: 292 },
+      { x: 120, y: 170 }, { x: 259, y: 202 }, { x: 256, y: 102 }, { x: 440, y: 210 },
+      { x: 474, y: 321 }, { x: 667, y: 375 }, { x: 631, y: 219 }, { x: 760, y: 297 },
     ],
     water: [
       { x: 90, y: 100, rx: 70, ry: 40 }, { x: 230, y: 440, rx: 75, ry: 28 },
@@ -468,8 +468,8 @@ const LEVELS = [
       { x: 640, y: 390 }, { x: 640, y: 160 }, { x: 820, y: 160 },
     ],
     buildSpots: [
-      { x: 250, y: 138 }, { x: 112, y: 240 }, { x: 250, y: 342 }, { x: 470, y: 342 },
-      { x: 592, y: 220 }, { x: 688, y: 250 }, { x: 448, y: 40 }, { x: 300, y: 40 },
+      { x: 250, y: 116 }, { x: 134, y: 242 }, { x: 249, y: 367 }, { x: 470, y: 366 },
+      { x: 571, y: 219 }, { x: 666, y: 250 }, { x: 456, y: 40 }, { x: 360, y: 140 },
     ],
     water: [
       { x: 330, y: 240, rx: 105, ry: 58 }, { x: 740, y: 60, rx: 55, ry: 32 },
@@ -503,6 +503,71 @@ const LEVELS = [
 const LEVEL_1 = LEVELS[0];
 
 // A polyline path enemies walk along, addressed by distance from the start.
+//
+// Levels describe a road with a handful of control points. Path.fromLevel()
+// bends long straight runs with a gentle meander and runs a centripetal
+// Catmull-Rom spline through the result, producing a dense polyline that the
+// simulation walks and the renderer draws, so the road reads as a winding
+// trail rather than a grid.
+
+function dist(a, b) {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+// Insert an offset midpoint into every long straight segment so roads wander
+// a little instead of running ruler-straight. Alternates side to side.
+function meanderWaypoints(points, { minLength = 130, amount = 0.11, maxOffset = 22 } = {}) {
+  if (points.length < 2) return points.map((p) => ({ ...p }));
+  const out = [{ ...points[0] }];
+  let side = 1;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const len = dist(a, b);
+    // Leave the off-screen entry and exit stubs straight.
+    const offscreen = a.x < 0 || a.y < 0 || b.x < 0 || b.y < 0 || a.x > 800 || b.x > 800;
+    if (len >= minLength && !offscreen) {
+      const nx = -(b.y - a.y) / len;
+      const ny = (b.x - a.x) / len;
+      const off = Math.min(maxOffset, len * amount) * side;
+      out.push({ x: (a.x + b.x) / 2 + nx * off, y: (a.y + b.y) / 2 + ny * off });
+      side = -side;
+    }
+    out.push({ ...b });
+  }
+  return out;
+}
+
+// Centripetal Catmull-Rom through the control points (Barry–Goldman form).
+// The first and last points are kept exactly.
+function smoothWaypoints(points, samplesPerSegment = 12) {
+  if (points.length < 3) return points.map((p) => ({ ...p }));
+  const pts = [points[0], ...points, points[points.length - 1]];
+  const knot = (t, a, b) => t + Math.pow(Math.max(dist(a, b), 1e-6), 0.5);
+  const out = [{ ...points[0] }];
+
+  for (let i = 1; i < pts.length - 2; i++) {
+    const [p0, p1, p2, p3] = [pts[i - 1], pts[i], pts[i + 1], pts[i + 2]];
+    const t0 = 0;
+    const t1 = knot(t0, p0, p1);
+    const t2 = knot(t1, p1, p2);
+    const t3 = knot(t2, p2, p3);
+    for (let s = 1; s <= samplesPerSegment; s++) {
+      const t = t1 + ((t2 - t1) * s) / samplesPerSegment;
+      const lerp = (a, b, ta, tb) => {
+        const w = (t - ta) / (tb - ta);
+        return { x: a.x + (b.x - a.x) * w, y: a.y + (b.y - a.y) * w };
+      };
+      const a1 = lerp(p0, p1, t0, t1);
+      const a2 = lerp(p1, p2, t1, t2);
+      const a3 = lerp(p2, p3, t2, t3);
+      const b1 = lerp(a1, a2, t0, t2);
+      const b2 = lerp(a2, a3, t1, t3);
+      out.push(lerp(b1, b2, t1, t2));
+    }
+  }
+  return out;
+}
 
 class Path {
   constructor(waypoints) {
@@ -519,6 +584,13 @@ class Path {
       this.segmentLengths.push(len);
       this.totalLength += len;
     }
+  }
+
+  // The smooth, winding road for a level. Set `level.smoothPath = false` to
+  // walk the raw control points instead.
+  static fromLevel(level) {
+    if (level.smoothPath === false) return new Path(level.path);
+    return new Path(smoothWaypoints(meanderWaypoints(level.path)));
   }
 
   // Position at `dist` from the start, clamped to the path's ends.
@@ -560,7 +632,7 @@ class Game {
     this.level = level;
     this.towerTypes = towerTypes;
     this.enemyTypes = enemyTypes;
-    this.path = new Path(level.path);
+    this.path = Path.fromLevel(level);
 
     this.gold = level.startingGold;
     this.lives = level.startingLives;
@@ -1400,17 +1472,17 @@ function getScene(game) {
   // Path: dark edge, fill, worn center line.
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  tracePath(ctx, level.path);
+  tracePath(ctx, game.path.waypoints);
   ctx.strokeStyle = theme.pathEdge;
   ctx.lineWidth = 34;
   ctx.stroke();
-  tracePath(ctx, level.path);
+  tracePath(ctx, game.path.waypoints);
   ctx.strokeStyle = theme.pathFill;
   ctx.lineWidth = 28;
   ctx.stroke();
   ctx.save();
   ctx.setLineDash([2, 14]);
-  tracePath(ctx, level.path);
+  tracePath(ctx, game.path.waypoints);
   ctx.strokeStyle = theme.pathLine;
   ctx.lineWidth = 3;
   ctx.stroke();

@@ -29,6 +29,7 @@ function makeLevel(overrides = {}) {
     startingGold: 100,
     startingLives: 3,
     sellRefund: 0.5,
+    smoothPath: false, // mechanics tests use the raw straight path
     path: [{ x: 0, y: 0 }, { x: 300, y: 0 }],
     buildSpots: [{ x: 150, y: 30 }, { x: 150, y: 190 }], // spot 1 is far from the path
     waves: [

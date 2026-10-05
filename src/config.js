@@ -151,7 +151,7 @@ export const ENEMY_TYPES = {
     look: { body: 'round', features: ['tusks', 'club', 'pads'] },
   },
   hydra: {
-    id: 'hydra', name: 'Hydra', hp: 2600, speed: 30, bounty: 700, radius: 23,
+    id: 'hydra', name: 'Hydra', hp: 2000, speed: 30, bounty: 700, radius: 23,
     armor: 0.35, magicResist: 0.4, color: '#3f8a5a', boss: true,
     look: { body: 'big', features: ['horns', 'spikes', 'tusks', 'crown', 'glow'] },
   },

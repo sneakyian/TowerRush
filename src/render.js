@@ -73,17 +73,17 @@ function getScene(game) {
   // Path: dark edge, fill, worn center line.
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  tracePath(ctx, level.path);
+  tracePath(ctx, game.path.waypoints);
   ctx.strokeStyle = theme.pathEdge;
   ctx.lineWidth = 34;
   ctx.stroke();
-  tracePath(ctx, level.path);
+  tracePath(ctx, game.path.waypoints);
   ctx.strokeStyle = theme.pathFill;
   ctx.lineWidth = 28;
   ctx.stroke();
   ctx.save();
   ctx.setLineDash([2, 14]);
-  tracePath(ctx, level.path);
+  tracePath(ctx, game.path.waypoints);
   ctx.strokeStyle = theme.pathLine;
   ctx.lineWidth = 3;
   ctx.stroke();
