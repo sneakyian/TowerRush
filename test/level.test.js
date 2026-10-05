@@ -32,7 +32,8 @@ test('every level config is coherent', () => {
   for (const type of Object.values(TOWER_TYPES)) {
     assert.equal(type.levels.length, MAX_TOWER_LEVEL);
     for (let i = 1; i < type.levels.length; i++) {
-      const hit = (lvl) => lvl.damage ?? lvl.dps; // beam towers express damage per second
+      // Beam towers express damage per second; beacons express a boost.
+      const hit = (lvl) => lvl.damage ?? lvl.dps ?? lvl.boost;
       assert.ok(hit(type.levels[i]) > hit(type.levels[i - 1]), `${type.id} tier ${i + 1} should hit harder`);
       assert.ok(type.levels[i].cost > type.levels[i - 1].cost, `${type.id} tier ${i + 1} should cost more`);
     }
@@ -166,7 +167,7 @@ for (const level of LEVELS) {
 }
 
 test('no single tower type wins every level (armor, resistance, and mechanics matter)', () => {
-  for (const strategy of ['archersOnly', 'magesOnly', 'cannonsOnly', 'frostOnly', 'teslaOnly', 'flameOnly', 'laserOnly']) {
+  for (const strategy of ['archersOnly', 'magesOnly', 'cannonsOnly', 'mortarsOnly', 'snipersOnly', 'frostOnly', 'teslaOnly', 'flameOnly', 'venomOnly', 'laserOnly', 'beaconsOnly']) {
     const wins = LEVELS.filter((level) => playLevel(level, { strategy }).phase === PHASE.WON).length;
     assert.ok(wins < LEVELS.length, `${strategy} beat every level`);
   }

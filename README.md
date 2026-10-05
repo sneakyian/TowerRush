@@ -22,23 +22,34 @@ from the sources with `npm run build`.)
 - Pick a level. Beating a level unlocks the next; progress is saved in
   your browser.
 - Click a **round build spot** next to the path, then pick a tower.
-- Click a built tower to **upgrade** it (three tiers) or **sell** it for
+- Click a built tower to **upgrade** it (four tiers) or **sell** it for
   half of what you've invested.
 - Click **Start Wave** to send the next wave. Every enemy that reaches the
   castle costs 1 life, heavy brutes (orcs, yetis, trolls, golems) cost 2,
   and the **boss** on the final wave costs 5.
 
-### Towers and damage types
+### Towers
 
-| Tower  | Cost (tiers) | Damage   | Notes                                   |
-| ------ | ------------ | -------- | --------------------------------------- |
-| Archer | 70/110/160   | physical | Fast, cheap; the backbone of a defense  |
-| Mage   | 100/160/240  | magic    | Slow but ignores armor; long range      |
-| Cannon | 125/220/320  | physical | Splash damage for packed groups         |
+Eleven towers, each with **four upgrade tiers**. Physical damage is reduced
+by an enemy's **armor**; magic damage by its **magic resistance**.
 
-Physical damage is reduced by an enemy's **armor**; magic damage by its
-**magic resistance**. Armored golems and trolls want mages; spectral
-sprites, wisps and witches want archers and cannons.
+| Tower          | Base cost | Damage   | Mechanic                                             |
+| -------------- | --------- | -------- | ---------------------------------------------------- |
+| Archer Tower   | 70g       | physical | Fast, cheap arrows                                   |
+| Mage Tower     | 100g      | magic    | Slow bolts that ignore armor                         |
+| Cannon Tower   | 125g      | physical | Splash damage                                        |
+| Mortar         | 180g      | physical | Huge long-range blast, but a minimum range           |
+| Sniper Nest    | 150g      | physical | Enormous single shots, pierce armor, target the toughest |
+| Frost Spire    | 80g       | magic    | Ice shards slow enemies                              |
+| Tesla Coil     | 140g      | magic    | Chain lightning arcs between enemies                 |
+| Flamethrower   | 110g      | physical | Short range; leaves enemies burning                  |
+| Venom Spitter  | 120g      | magic    | Poison that stacks with every hit                    |
+| Laser Lance    | 160g      | magic    | Beam that ramps up the longer it holds a target      |
+| War Beacon     | 130g      | —        | Boosts the damage of every tower in its aura         |
+
+Armored golems and trolls want magic or armor-piercing fire; spectral
+sprites, wisps and witches want physical damage. Chill, poison, lightning
+and a well-placed beacon turn a good defense into a great one.
 
 ### Levels
 

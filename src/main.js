@@ -150,15 +150,22 @@ function showLevelSelect() {
 // One line of stats for the tower info panel, per attack style.
 function describeStats(type, stats) {
   const parts = [];
+  if (type.attack === 'aura') {
+    parts.push(`towers within ${stats.range} deal ×${stats.boost} damage`);
+    return parts.join(' · ');
+  }
   if (type.attack === 'beam') {
     parts.push(`${stats.dps} ${type.damageType} dps, up to ×${stats.rampMultiplier} when held`);
   } else {
     parts.push(`${stats.damage} ${type.damageType} dmg`, `${(1 / stats.fireInterval).toFixed(1)}/s`);
   }
-  parts.push(`${stats.range} range`);
+  parts.push(stats.minRange ? `${stats.minRange}–${stats.range} range` : `${stats.range} range`);
   if (stats.splashRadius) parts.push(`${stats.splashRadius} splash`);
+  if (stats.armorPierce) parts.push(`pierces ${Math.round(stats.armorPierce * 100)}% armor`);
+  if (type.targeting === 'toughest') parts.push('targets the toughest');
   if (stats.slow) parts.push(`slows ${Math.round((1 - stats.slow.factor) * 100)}% for ${stats.slow.duration}s`);
   if (stats.burn) parts.push(`burns ${stats.burn.dps}/s for ${stats.burn.duration}s`);
+  if (stats.poison) parts.push(`poison ${stats.poison.dpsPerStack}/s per stack, up to ${stats.poison.maxStacks}`);
   if (stats.jumps) parts.push(`arcs to ${stats.jumps} more`);
   return parts.join(' · ');
 }

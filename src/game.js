@@ -11,8 +11,10 @@ export const PHASE = {
 };
 
 // Physical damage is cut by armor, magic damage by magic resistance.
-export function effectiveDamage(amount, damageType, enemyType) {
-  const reduction = damageType === 'magic' ? enemyType.magicResist || 0 : enemyType.armor || 0;
+export function effectiveDamage(amount, damageType, enemyType, armorPierce = 0) {
+  const reduction = damageType === 'magic'
+    ? enemyType.magicResist || 0
+    : (enemyType.armor || 0) * (1 - armorPierce);
   return amount * (1 - reduction);
 }
 
@@ -183,6 +185,7 @@ export class Game {
         flash: 0, // seconds of white hit-flash left, for rendering
         slow: null, // { factor, remaining } while chilled
         burn: null, // { dps, remaining, damageType } while burning
+        poison: null, // { stacks, dpsPerStack, remaining } while poisoned
         age: 0, // seconds since spawning, for the renderer
       });
       const pos = this.path.positionAt(0);
@@ -206,6 +209,12 @@ export class Game {
         if (enemy.burn.remaining <= 0) enemy.burn = null;
         if (!enemy.alive) continue;
       }
+      if (enemy.poison) {
+        this.damageEnemy(enemy, enemy.poison.dpsPerStack * enemy.poison.stacks * dt, 'magic', { flash: false });
+        enemy.poison.remaining -= dt;
+        if (enemy.poison.remaining <= 0) enemy.poison = null;
+        if (!enemy.alive) continue;
+      }
       enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
@@ -218,7 +227,25 @@ export class Game {
     }
   }
 
+  // Damage multiplier a tower receives from the strongest beacon covering it.
+  applyBeaconBoosts() {
+    for (const tower of this.towers) if (tower) tower.boost = 1;
+    this.towers.forEach((beacon, b) => {
+      if (!beacon || (this.towerTypes[beacon.typeId].attack || 'projectile') !== 'aura') return;
+      const stats = this.towerStats(beacon);
+      const from = this.level.buildSpots[b];
+      this.towers.forEach((tower, i) => {
+        if (!tower || i === b) return;
+        const spot = this.level.buildSpots[i];
+        if (Math.hypot(spot.x - from.x, spot.y - from.y) <= stats.range) {
+          tower.boost = Math.max(tower.boost, stats.boost);
+        }
+      });
+    });
+  }
+
   updateTowers(dt) {
+    this.applyBeaconBoosts();
     for (let i = 0; i < this.towers.length; i++) {
       const tower = this.towers[i];
       if (!tower) continue;
@@ -227,21 +254,23 @@ export class Game {
       const spot = this.level.buildSpots[i];
       const attack = type.attack || 'projectile';
       tower.age = (tower.age || 0) + dt; // seconds since built/upgraded, for the renderer
+      const boost = tower.boost || 1;
 
+      if (attack === 'aura') continue;
       if (attack === 'beam') {
-        this.updateBeam(tower, type, stats, spot, dt);
+        this.updateBeam(tower, type, stats, spot, dt, boost);
         continue;
       }
 
       tower.cooldown = Math.max(0, tower.cooldown - dt);
       if (tower.cooldown > 0) continue;
-      const target = this.findTarget(spot, stats.range);
+      const target = this.findTarget(spot, stats.range, { minRange: stats.minRange, mode: type.targeting });
       if (!target) continue;
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
       tower.cooldown = stats.fireInterval;
-      this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level });
+      this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level, targetX: pos.x, targetY: pos.y });
 
       if (attack === 'projectile') {
         this.projectiles.push({
@@ -254,10 +283,12 @@ export class Game {
           targetId: target.id,
           lastTarget: pos,
           speed: type.projectileSpeed,
-          damage: stats.damage,
+          damage: stats.damage * boost,
           damageType: type.damageType,
+          armorPierce: stats.armorPierce || 0,
           splashRadius: stats.splashRadius,
           slow: stats.slow || null,
+          poison: stats.poison || null,
           color: type.color,
           towerType: tower.typeId,
           towerLevel: tower.level,
@@ -265,22 +296,22 @@ export class Game {
           dirY: 0,
         });
       } else if (attack === 'instant') {
-        this.damageEnemy(target, stats.damage, type.damageType);
-        if (stats.burn) this.applyBurn(target, stats.burn, type.damageType);
+        this.damageEnemy(target, stats.damage * boost, type.damageType);
+        if (stats.burn) this.applyBurn(target, { dps: stats.burn.dps * boost, duration: stats.burn.duration }, type.damageType);
         this.pushEvent({ type: 'hit', x: pos.x, y: pos.y, towerType: tower.typeId, level: tower.level, splash: 0 });
       } else if (attack === 'chain') {
-        this.chainLightning(spot, target, stats, type, tower);
+        this.chainLightning(spot, target, stats, type, tower, boost);
       }
     }
   }
 
   // Lightning hits the target, then arcs to the nearest untouched enemy
   // within chainRadius, losing damage with every jump.
-  chainLightning(spot, target, stats, type, tower) {
+  chainLightning(spot, target, stats, type, tower, boost = 1) {
     const points = [{ x: spot.x, y: spot.y - 26 }];
     const struck = new Set();
     let current = target;
-    let damage = stats.damage;
+    let damage = stats.damage * boost;
     for (let jump = 0; jump <= stats.jumps && current; jump++) {
       const pos = this.path.positionAt(current.dist);
       points.push(pos);
@@ -304,7 +335,7 @@ export class Game {
   }
 
   // A beam stays on its target while it can and ramps up the longer it holds.
-  updateBeam(tower, type, stats, spot, dt) {
+  updateBeam(tower, type, stats, spot, dt, boost = 1) {
     let target = this.enemies.find((e) => e.id === tower.beamTargetId && e.alive) || null;
     if (target) {
       const pos = this.path.positionAt(target.dist);
@@ -322,7 +353,7 @@ export class Game {
     const multiplier = 1 + (stats.rampMultiplier - 1) * ramp;
     const pos = this.path.positionAt(target.dist);
     tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
-    this.damageEnemy(target, stats.dps * multiplier * dt, type.damageType, { flash: false });
+    this.damageEnemy(target, stats.dps * multiplier * boost * dt, type.damageType, { flash: false });
   }
 
   // Current damage multiplier of a beam tower, for the HUD and renderer.
@@ -341,6 +372,16 @@ export class Game {
     }
   }
 
+  applyPoison(enemy, poison) {
+    if (!enemy.poison) {
+      enemy.poison = { stacks: 1, dpsPerStack: poison.dpsPerStack, remaining: poison.duration };
+    } else {
+      enemy.poison.stacks = Math.min(poison.maxStacks, enemy.poison.stacks + 1);
+      enemy.poison.dpsPerStack = Math.max(enemy.poison.dpsPerStack, poison.dpsPerStack);
+      enemy.poison.remaining = poison.duration;
+    }
+  }
+
   applyBurn(enemy, burn, damageType) {
     if (!enemy.burn || burn.dps >= enemy.burn.dps) {
       enemy.burn = { dps: burn.dps, remaining: burn.duration, damageType };
@@ -350,13 +391,19 @@ export class Game {
   }
 
   // Kingdom Rush convention: shoot the enemy furthest along the path in range.
-  findTarget(from, range) {
+  // `mode: 'toughest'` instead picks the highest-HP enemy; `minRange` skips
+  // enemies that are too close (mortars).
+  findTarget(from, range, { minRange = 0, mode = 'furthest' } = {}) {
     let best = null;
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       const pos = this.path.positionAt(enemy.dist);
-      if (Math.hypot(pos.x - from.x, pos.y - from.y) > range) continue;
-      if (!best || enemy.dist > best.dist) best = enemy;
+      const d = Math.hypot(pos.x - from.x, pos.y - from.y);
+      if (d > range || d < minRange) continue;
+      const better = mode === 'toughest'
+        ? !best || enemy.hp > best.hp || (enemy.hp === best.hp && enemy.dist > best.dist)
+        : !best || enemy.dist > best.dist;
+      if (better) best = enemy;
     }
     return best;
   }
@@ -406,20 +453,22 @@ export class Game {
         if (!enemy.alive) continue;
         const pos = this.path.positionAt(enemy.dist);
         if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
-          this.damageEnemy(enemy, proj.damage, proj.damageType);
+          this.damageEnemy(enemy, proj.damage, proj.damageType, { armorPierce: proj.armorPierce });
           if (proj.slow) this.applySlow(enemy, proj.slow);
+          if (proj.poison) this.applyPoison(enemy, proj.poison);
         }
       }
     } else if (directTarget) {
-      this.damageEnemy(directTarget, proj.damage, proj.damageType);
+      this.damageEnemy(directTarget, proj.damage, proj.damageType, { armorPierce: proj.armorPierce });
       if (proj.slow) this.applySlow(directTarget, proj.slow);
+      if (proj.poison) this.applyPoison(directTarget, proj.poison);
     }
   }
 
-  damageEnemy(enemy, amount, damageType = 'physical', { flash = true } = {}) {
+  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0 } = {}) {
     if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
-    enemy.hp -= effectiveDamage(amount, damageType, type);
+    enemy.hp -= effectiveDamage(amount, damageType, type, armorPierce);
     if (flash) enemy.flash = 0.12;
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;

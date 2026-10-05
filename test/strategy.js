@@ -28,16 +28,20 @@ export const STRATEGIES = {
   // Kingdom Rush build: archer → mage → archer → cannon → ...
   mixed: ['archer', 'mage', 'archer', 'cannon'],
   // Kingdom Rush and Radiant Defense towers together.
-  hybrid: ['archer', 'frost', 'mage', 'tesla', 'archer', 'flame', 'cannon', 'laser'],
-  // Only the Radiant Defense quartet.
-  radiant: ['frost', 'tesla', 'flame', 'laser'],
+  hybrid: ['archer', 'frost', 'mage', 'tesla', 'sniper', 'flame', 'venom', 'mortar', 'laser', 'beacon', 'cannon'],
+  // Only the Radiant Defense set.
+  radiant: ['frost', 'tesla', 'flame', 'venom', 'laser'],
   archersOnly: ['archer'],
   magesOnly: ['mage'],
   cannonsOnly: ['cannon'],
+  mortarsOnly: ['mortar'],
+  snipersOnly: ['sniper'],
   frostOnly: ['frost'],
   teslaOnly: ['tesla'],
   flameOnly: ['flame'],
+  venomOnly: ['venom'],
   laserOnly: ['laser'],
+  beaconsOnly: ['beacon'],
 };
 
 // Perform one round of purchases: build on the next free spot if affordable,

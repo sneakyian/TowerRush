@@ -194,7 +194,7 @@ test('a cannon hit leaves a long-lived scorch mark on the ground layer', () => {
   for (let i = 0; i < 40; i++) effects.update(0.05); // 2s: scorch outlives the blast
   assert.equal(effects.particles.length, 0);
   assert.ok(effects.groundParticles.some((p) => p.shape === 'scorch'));
-  for (let i = 0; i < 60; i++) effects.update(0.05); // another 3s: gone
+  for (let i = 0; i < 80; i++) effects.update(0.05); // another 4s: gone
   assert.equal(effects.groundParticles.length, 0);
 });
 

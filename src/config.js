@@ -21,6 +21,7 @@ export const TOWER_TYPES = {
       { cost: 70, damage: 10, range: 90, fireInterval: 0.5, splashRadius: 0 },
       { cost: 110, damage: 19, range: 100, fireInterval: 0.45, splashRadius: 0 },
       { cost: 160, damage: 32, range: 110, fireInterval: 0.4, splashRadius: 0 },
+      { cost: 240, damage: 52, range: 120, fireInterval: 0.35, splashRadius: 0 },
     ],
   },
   mage: {
@@ -35,6 +36,7 @@ export const TOWER_TYPES = {
       { cost: 100, damage: 18, range: 105, fireInterval: 1.0, splashRadius: 0 },
       { cost: 160, damage: 36, range: 115, fireInterval: 0.95, splashRadius: 0 },
       { cost: 240, damage: 64, range: 125, fireInterval: 0.9, splashRadius: 0 },
+      { cost: 360, damage: 105, range: 135, fireInterval: 0.85, splashRadius: 0 },
     ],
   },
   cannon: {
@@ -49,10 +51,44 @@ export const TOWER_TYPES = {
       { cost: 125, damage: 28, range: 80, fireInterval: 1.5, splashRadius: 40 },
       { cost: 220, damage: 52, range: 90, fireInterval: 1.4, splashRadius: 48 },
       { cost: 320, damage: 92, range: 100, fireInterval: 1.3, splashRadius: 56 },
+      { cost: 460, damage: 150, range: 110, fireInterval: 1.2, splashRadius: 64 },
+    ],
+  },
+  mortar: {
+    id: 'mortar',
+    name: 'Mortar',
+    desc: 'Lobs shells across the map with a huge blast, but cannot hit anything close.',
+    damageType: 'physical',
+    attack: 'projectile',
+    projectileSpeed: 180,
+    color: '#7a6a4a',
+    // minRange: enemies nearer than this cannot be targeted.
+    levels: [
+      { cost: 180, damage: 60, range: 170, minRange: 70, fireInterval: 2.6, splashRadius: 56 },
+      { cost: 280, damage: 105, range: 185, minRange: 70, fireInterval: 2.5, splashRadius: 62 },
+      { cost: 400, damage: 170, range: 200, minRange: 70, fireInterval: 2.4, splashRadius: 70 },
+      { cost: 560, damage: 260, range: 215, minRange: 70, fireInterval: 2.3, splashRadius: 78 },
+    ],
+  },
+  sniper: {
+    id: 'sniper',
+    name: 'Sniper Nest',
+    desc: 'Slow, enormous shots that pierce armor and always pick the toughest enemy.',
+    damageType: 'physical',
+    attack: 'projectile',
+    projectileSpeed: 700,
+    color: '#4a6b3a',
+    targeting: 'toughest',
+    // armorPierce: fraction of the target's armor that is ignored.
+    levels: [
+      { cost: 150, damage: 55, range: 150, fireInterval: 2.0, splashRadius: 0, armorPierce: 0.5 },
+      { cost: 240, damage: 100, range: 165, fireInterval: 1.9, splashRadius: 0, armorPierce: 0.6 },
+      { cost: 350, damage: 170, range: 180, fireInterval: 1.8, splashRadius: 0, armorPierce: 0.7 },
+      { cost: 480, damage: 270, range: 195, fireInterval: 1.7, splashRadius: 0, armorPierce: 0.8 },
     ],
   },
 
-  // --- Radiant Defense quartet: towers defined by their mechanic -----------
+  // --- Radiant Defense set: towers defined by their mechanic -------------
   frost: {
     id: 'frost',
     name: 'Frost Spire',
@@ -66,6 +102,7 @@ export const TOWER_TYPES = {
       { cost: 80, damage: 6, range: 95, fireInterval: 0.8, splashRadius: 0, slow: { factor: 0.55, duration: 2 } },
       { cost: 130, damage: 12, range: 105, fireInterval: 0.75, splashRadius: 0, slow: { factor: 0.45, duration: 2.2 } },
       { cost: 190, damage: 20, range: 115, fireInterval: 0.7, splashRadius: 0, slow: { factor: 0.35, duration: 2.5 } },
+      { cost: 280, damage: 32, range: 125, fireInterval: 0.65, splashRadius: 0, slow: { factor: 0.28, duration: 2.8 } },
     ],
   },
   tesla: {
@@ -81,6 +118,7 @@ export const TOWER_TYPES = {
       { cost: 140, damage: 22, range: 100, fireInterval: 1.2, jumps: 3, chainRadius: 70, falloff: 0.7 },
       { cost: 230, damage: 42, range: 110, fireInterval: 1.1, jumps: 4, chainRadius: 80, falloff: 0.72 },
       { cost: 330, damage: 70, range: 120, fireInterval: 1.0, jumps: 5, chainRadius: 90, falloff: 0.75 },
+      { cost: 470, damage: 110, range: 130, fireInterval: 0.9, jumps: 6, chainRadius: 100, falloff: 0.78 },
     ],
   },
   flame: {
@@ -95,6 +133,24 @@ export const TOWER_TYPES = {
       { cost: 110, damage: 4, range: 70, fireInterval: 0.15, burn: { dps: 6, duration: 3 } },
       { cost: 180, damage: 8, range: 78, fireInterval: 0.15, burn: { dps: 12, duration: 3 } },
       { cost: 260, damage: 14, range: 86, fireInterval: 0.15, burn: { dps: 20, duration: 3.5 } },
+      { cost: 380, damage: 22, range: 94, fireInterval: 0.15, burn: { dps: 32, duration: 4 } },
+    ],
+  },
+  venom: {
+    id: 'venom',
+    name: 'Venom Spitter',
+    desc: 'Poison that stacks with every hit; keep spitting and heavies melt.',
+    damageType: 'magic',
+    attack: 'projectile',
+    projectileSpeed: 260,
+    color: '#8fd33a',
+    // poison: each hit adds a stack (up to maxStacks); the target takes
+    // dpsPerStack × stacks per second for `duration` seconds after the last hit.
+    levels: [
+      { cost: 120, damage: 5, range: 95, fireInterval: 0.6, splashRadius: 0, poison: { dpsPerStack: 5, maxStacks: 5, duration: 4 } },
+      { cost: 190, damage: 9, range: 105, fireInterval: 0.55, splashRadius: 0, poison: { dpsPerStack: 9, maxStacks: 5, duration: 4 } },
+      { cost: 280, damage: 14, range: 115, fireInterval: 0.5, splashRadius: 0, poison: { dpsPerStack: 14, maxStacks: 6, duration: 4.5 } },
+      { cost: 390, damage: 20, range: 125, fireInterval: 0.45, splashRadius: 0, poison: { dpsPerStack: 20, maxStacks: 6, duration: 5 } },
     ],
   },
   laser: {
@@ -110,11 +166,28 @@ export const TOWER_TYPES = {
       { cost: 160, dps: 20, range: 110, rampTime: 3, rampMultiplier: 2.5 },
       { cost: 260, dps: 40, range: 120, rampTime: 2.8, rampMultiplier: 2.7 },
       { cost: 380, dps: 70, range: 130, rampTime: 2.5, rampMultiplier: 3 },
+      { cost: 540, dps: 110, range: 140, rampTime: 2.2, rampMultiplier: 3.2 },
+    ],
+  },
+  beacon: {
+    id: 'beacon',
+    name: 'War Beacon',
+    desc: 'Fires nothing itself, but every tower within its light hits harder.',
+    damageType: 'none',
+    attack: 'aura',
+    color: '#ffd166',
+    // boost: damage multiplier granted to towers within `range` of the beacon.
+    // Boosts from several beacons do not stack; the strongest applies.
+    levels: [
+      { cost: 130, range: 90, boost: 1.2 },
+      { cost: 220, range: 100, boost: 1.3 },
+      { cost: 330, range: 110, boost: 1.4 },
+      { cost: 460, range: 120, boost: 1.55 },
     ],
   },
 };
 
-export const MAX_TOWER_LEVEL = 3;
+export const MAX_TOWER_LEVEL = 4;
 
 // `lives` is what an enemy costs if it reaches the castle (default 1):
 // heavy brutes cost 2, bosses cost 5.

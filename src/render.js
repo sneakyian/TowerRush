@@ -29,7 +29,13 @@ export function render(ctx, game, effects, ui, time) {
   const dpr = ctx.getTransform().a || 1;
   const scene = getScene(game, dpr);
   ctx.clearRect(0, 0, level.width, level.height);
-  ctx.drawImage(scene.terrain, 0, 0, level.width, level.height);
+
+  // Screen shake: a small decaying offset applied to everything but the HUD.
+  ctx.save();
+  if (effects.shake > 0) {
+    ctx.translate(Math.sin(time * 47) * effects.shake, Math.cos(time * 31) * effects.shake * 0.7);
+  }
+  ctx.drawImage(scene.terrain, -8, -8, level.width + 16, level.height + 16);
 
   drawWaterAnimation(ctx, level, time);
   drawParticleList(ctx, effects.groundParticles);
@@ -41,8 +47,16 @@ export function render(ctx, game, effects, ui, time) {
   drawBeams(ctx, game, time);
   drawBolts(ctx, effects.bolts);
   drawCloudShadows(ctx, scene.clouds, level, time);
+  drawBeaconAuras(ctx, game, time);
   drawParticleList(ctx, effects.particles, true);
+  ctx.restore();
   drawVignette(ctx, scene.vignette, level);
+  if (effects.flash) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, effects.flash.alpha));
+    ctx.fillStyle = effects.flash.color;
+    ctx.fillRect(0, 0, level.width, level.height);
+    ctx.globalAlpha = 1;
+  }
   drawTexts(ctx, effects);
   drawBossBar(ctx, game);
   drawBanner(ctx, effects, level);
@@ -645,6 +659,10 @@ function drawTowers(ctx, game, ui, time) {
     else if (tower.typeId === 'tesla') drawTeslaTower(ctx, spot, time, justFired, tower.level);
     else if (tower.typeId === 'flame') drawFlameTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
     else if (tower.typeId === 'laser') drawLaserTower(ctx, spot, time, tower.angle ?? 0, tower.beamTargetId ? game.beamMultiplier(tower) : 0, tower.level);
+    else if (tower.typeId === 'mortar') drawMortarTower(ctx, spot, time, tower.angle ?? -Math.PI / 2, tower.cooldown / stats.fireInterval, tower.level);
+    else if (tower.typeId === 'sniper') drawSniperTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
+    else if (tower.typeId === 'venom') drawVenomTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
+    else if (tower.typeId === 'beacon') drawBeaconTower(ctx, spot, time, tower.level);
     ctx.restore();
 
     // Level pips.
@@ -691,7 +709,7 @@ function drawPlatform(ctx, spot, level) {
 function drawArcherTower(ctx, spot, time, justFired, level) {
   const x = spot.x;
   const y = spot.y - level * 3; // taller with each tier
-  const roofColor = ['#b5443c', '#3f6fb5', '#b58a2a'][level];
+  const roofColor = ['#b5443c', '#3f6fb5', '#b58a2a', '#8a3fb5'][level];
   if (level >= 2) {
     // Stone lower storey on the top tier.
     ctx.fillStyle = '#9aa1a8';
@@ -773,7 +791,7 @@ function drawArcherTower(ctx, spot, time, justFired, level) {
   ctx.moveTo(x, top);
   ctx.lineTo(x, top - 7);
   ctx.stroke();
-  ctx.fillStyle = ['#e8b73a', '#e8b73a', '#ffffff'][level];
+  ctx.fillStyle = ['#e8b73a', '#e8b73a', '#ffffff', '#ffd700'][level];
   ctx.beginPath();
   ctx.moveTo(x, top - 7);
   ctx.lineTo(x + 8 + Math.sin(time * 4) * 1.5, top - 4.5);
@@ -787,7 +805,7 @@ function drawMageTower(ctx, spot, time, justFired, level) {
   const y = spot.y;
   const h = 18 + level * 5;
   // Stone body with brick courses.
-  ctx.fillStyle = ['#8d93b8', '#7f86b8', '#6f78b8'][level];
+  ctx.fillStyle = ['#8d93b8', '#7f86b8', '#6f78b8', '#5f6ab8'][level];
   ctx.strokeStyle = '#5c6186';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -905,7 +923,7 @@ function drawCannonTower(ctx, spot, angle, cooldownFrac, level) {
   }
   // Turret dome with rivets and hatch.
   const r = 11 + level * 1.5;
-  ctx.fillStyle = ['#555b61', '#4f5a66', '#5a4f4a'][level];
+  ctx.fillStyle = ['#555b61', '#4f5a66', '#5a4f4a', '#3a3f4a'][level];
   ctx.strokeStyle = '#33373c';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -1049,7 +1067,7 @@ function drawFlameTower(ctx, spot, time, angle, justFired, level) {
   const x = spot.x;
   const y = spot.y - 8;
   // Brass fuel tank.
-  ctx.fillStyle = ['#b8863a', '#c4903a', '#d09a3a'][level];
+  ctx.fillStyle = ['#b8863a', '#c4903a', '#d09a3a', '#dca03a'][level];
   ctx.strokeStyle = '#6e4e1e';
   ctx.lineWidth = 1.5;
   roundRect(ctx, x - 11 - level, y - 12 - level, 22 + level * 2, 18 + level, 6);
@@ -1158,6 +1176,260 @@ function drawLaserTower(ctx, spot, time, angle, multiplier, level) {
       ctx.stroke();
     }
   }
+}
+
+function drawMortarTower(ctx, spot, time, angle, cooldownFrac, level) {
+  const x = spot.x;
+  const y = spot.y;
+  // Sandbag ring.
+  ctx.fillStyle = '#b8a070';
+  ctx.strokeStyle = '#7a6a4a';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.ellipse(x + Math.cos(a) * (13 + level), y + 3 + Math.sin(a) * (6 + level * 0.5), 5, 3, a, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  // Base plate and a short, fat tube angled up toward the target.
+  ctx.fillStyle = '#4a4f55';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 9 + level, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const recoil = Math.max(0, (cooldownFrac - 0.8) / 0.2) * 3;
+  const len = 18 + level * 2 - recoil;
+  const dx = Math.cos(angle) * 0.55;
+  const dy = -0.85; // mostly upward: a lobbing tube
+  ctx.strokeStyle = '#2f3338';
+  ctx.lineWidth = 9 + level;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 2);
+  ctx.lineTo(x + dx * len, y - 2 + dy * len);
+  ctx.stroke();
+  ctx.strokeStyle = '#1f2327';
+  ctx.lineWidth = 11 + level;
+  ctx.beginPath();
+  ctx.moveTo(x + dx * (len - 3), y - 2 + dy * (len - 3));
+  ctx.lineTo(x + dx * len, y - 2 + dy * len);
+  ctx.stroke();
+  // Muzzle smoke lingers after a shot.
+  if (cooldownFrac > 0.6) {
+    ctx.fillStyle = `rgba(150,150,150,${(cooldownFrac - 0.6) * 0.8})`;
+    ctx.beginPath();
+    ctx.arc(x + dx * (len + 6), y - 2 + dy * (len + 6) - (1 - cooldownFrac) * 20, 5 + (1 - cooldownFrac) * 12, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Shell crate.
+  ctx.fillStyle = '#6b4a2b';
+  ctx.strokeStyle = '#3f2e1a';
+  ctx.lineWidth = 1;
+  ctx.fillRect(x + 9, y - 2, 9, 7);
+  ctx.strokeRect(x + 9, y - 2, 9, 7);
+  ctx.fillStyle = '#2f3338';
+  for (const sx of [11.5, 14.5]) {
+    ctx.beginPath();
+    ctx.arc(x + sx, y - 4, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawSniperTower(ctx, spot, time, angle, justFired, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 40 + level * 5;
+  // Tall thin stilts with cross bracing.
+  ctx.strokeStyle = '#5f4a26';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 9, y + 3);
+  ctx.lineTo(x - 5, y - h + 8);
+  ctx.moveTo(x + 9, y + 3);
+  ctx.lineTo(x + 5, y - h + 8);
+  for (let b = 0; b < 3; b++) {
+    const by = y - 6 - b * ((h - 14) / 3);
+    const w = 8 - b * 1.2;
+    ctx.moveTo(x - w, by);
+    ctx.lineTo(x + w, by - 8);
+    ctx.moveTo(x + w, by);
+    ctx.lineTo(x - w, by - 8);
+  }
+  ctx.stroke();
+  // Crow's nest.
+  ctx.fillStyle = '#8d6e3a';
+  ctx.strokeStyle = '#5f4a26';
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(x - 10, y - h + 4, 20, 6);
+  ctx.strokeRect(x - 10, y - h + 4, 20, 6);
+  ctx.beginPath();
+  for (const px of [-9, -4.5, 0, 4.5, 9]) {
+    ctx.moveTo(x + px, y - h + 4);
+    ctx.lineTo(x + px, y - h - 2);
+  }
+  ctx.moveTo(x - 9, y - h - 1);
+  ctx.lineTo(x + 9, y - h - 1);
+  ctx.stroke();
+  // Marksman and a long rifle swung toward the target.
+  ctx.fillStyle = '#2e4a2a';
+  ctx.beginPath();
+  ctx.arc(x, y - h - 5, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(x - 2.5, y - h - 3, 5, 6);
+  ctx.strokeStyle = '#1f2327';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(x, y - h - 4);
+  ctx.lineTo(x + Math.cos(angle) * (18 + level * 2), y - h - 4 + Math.sin(angle) * (18 + level * 2));
+  ctx.stroke();
+  // Scope glint.
+  const glint = 0.4 + Math.sin(time * 5) * 0.3 + (justFired ? 0.4 : 0);
+  ctx.fillStyle = `rgba(200,255,220,${glint})`;
+  ctx.beginPath();
+  ctx.arc(x + Math.cos(angle) * 7, y - h - 6 + Math.sin(angle) * 7, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  // Canopy and pennant.
+  ctx.fillStyle = ['#4a6b3a', '#3f7a3a', '#2e8a4a', '#1f9a5a'][level];
+  ctx.beginPath();
+  ctx.moveTo(x - 13, y - h - 8);
+  ctx.lineTo(x, y - h - 18);
+  ctx.lineTo(x + 13, y - h - 8);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawVenomTower(ctx, spot, time, angle, justFired, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const r = 12 + level * 1.5;
+  // Bulbous pod with veins, pulsing as it builds pressure.
+  const pulse = 1 + Math.sin(time * 4) * 0.04 + (justFired ? 0.08 : 0);
+  ctx.fillStyle = ['#6fae3a', '#63a634', '#58a02e', '#4c9a28'][level];
+  ctx.strokeStyle = '#2f5a1a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(x, y - r * 0.6, r * pulse, r * 0.85 * pulse, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(47,90,26,0.6)';
+  ctx.lineWidth = 1;
+  for (let v = 0; v < 3 + level; v++) {
+    const a = (v / (3 + level)) * Math.PI * 2 + 0.4;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 0.6);
+    ctx.quadraticCurveTo(x + Math.cos(a) * r * 0.6, y - r * 0.6 + Math.sin(a) * r * 0.9, x + Math.cos(a) * r * 0.95, y - r * 0.6 + Math.sin(a) * r * 0.75);
+    ctx.stroke();
+  }
+  // Glowing sac.
+  ctx.fillStyle = `rgba(198,255,107,${0.45 + Math.sin(time * 6) * 0.15})`;
+  ctx.beginPath();
+  ctx.arc(x - r * 0.25, y - r * 0.8, r * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  // Spitting maw aimed at the target.
+  const mx = x + Math.cos(angle) * r * 0.8;
+  const my = y - r * 0.6 + Math.sin(angle) * r * 0.6;
+  ctx.fillStyle = '#2f5a1a';
+  ctx.beginPath();
+  ctx.ellipse(mx, my, 4 + level * 0.5, 3, angle, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8fd33a';
+  ctx.beginPath();
+  ctx.ellipse(mx, my, 2.5, 1.6, angle, 0, Math.PI * 2);
+  ctx.fill();
+  // Thorny leaves at the base.
+  ctx.fillStyle = '#3f7a35';
+  for (let lf = 0; lf < 4 + level; lf++) {
+    const a = (lf / (4 + level)) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 2);
+    ctx.lineTo(x + Math.cos(a) * (14 + level) - Math.sin(a) * 3, y + 2 + Math.sin(a) * 6 - Math.cos(a) * 1.5);
+    ctx.lineTo(x + Math.cos(a) * (16 + level), y + 2 + Math.sin(a) * 7);
+    ctx.lineTo(x + Math.cos(a) * (14 + level) + Math.sin(a) * 3, y + 2 + Math.sin(a) * 6 + Math.cos(a) * 1.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawBeaconTower(ctx, spot, time, level) {
+  const x = spot.x;
+  const y = spot.y;
+  const h = 18 + level * 3;
+  // Stone brazier on a pedestal.
+  ctx.fillStyle = '#7d848c';
+  ctx.strokeStyle = '#4a4f55';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y + 3);
+  ctx.lineTo(x - 4, y - h + 10);
+  ctx.lineTo(x + 4, y - h + 10);
+  ctx.lineTo(x + 6, y + 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#5d5a66';
+  ctx.beginPath();
+  ctx.moveTo(x - 11 - level, y - h + 10);
+  ctx.lineTo(x + 11 + level, y - h + 10);
+  ctx.lineTo(x + 8 + level, y - h);
+  ctx.lineTo(x - 8 - level, y - h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Flames, additive.
+  ctx.globalCompositeOperation = 'lighter';
+  for (let f = 0; f < 3 + level; f++) {
+    const fh = (12 + level * 3) * (0.8 + Math.sin(time * 9 + f * 1.7) * 0.25);
+    const lean = Math.sin(time * 5 + f) * 3;
+    const fx = x + (f - (2 + level) / 2) * 3.5;
+    ctx.fillStyle = f % 2 ? 'rgba(255,209,102,0.85)' : 'rgba(255,140,51,0.8)';
+    ctx.beginPath();
+    ctx.moveTo(fx - 4, y - h);
+    ctx.quadraticCurveTo(fx + lean, y - h - fh, fx + 4, y - h);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = `rgba(255,209,102,${0.18 + Math.sin(time * 3) * 0.06})`;
+  ctx.beginPath();
+  ctx.arc(x, y - h - 6, 18 + level * 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// Beacon auras: a soft pulsing circle around each beacon and warm links to
+// every tower it empowers.
+function drawBeaconAuras(ctx, game, time) {
+  ctx.globalCompositeOperation = 'lighter';
+  game.towers.forEach((beacon, b) => {
+    if (!beacon || beacon.typeId !== 'beacon') return;
+    const stats = game.towerStats(beacon);
+    const from = game.level.buildSpots[b];
+    const pulse = ((time * 0.6 + b * 0.3) % 1);
+    ctx.strokeStyle = `rgba(255,209,102,${0.35 * (1 - pulse)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(from.x, from.y, stats.range * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,209,102,0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(from.x, from.y, stats.range, 0, Math.PI * 2);
+    ctx.stroke();
+    game.towers.forEach((tower, i) => {
+      if (!tower || i === b || (tower.boost || 1) <= 1) return;
+      const to = game.level.buildSpots[i];
+      if (Math.hypot(to.x - from.x, to.y - from.y) > stats.range) return;
+      ctx.strokeStyle = `rgba(255,209,102,${0.18 + Math.sin(time * 4 + i) * 0.08})`;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 6]);
+      ctx.lineDashOffset = -time * 30;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y - 20);
+      ctx.lineTo(to.x, to.y - 10);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  });
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 function drawBeams(ctx, game, time) {
@@ -1315,6 +1587,12 @@ function drawEnemies(ctx, game, time) {
     }
     if (enemy.burn) {
       ctx.fillStyle = `rgba(255,120,40,${0.25 + Math.sin(time * 20 + enemy.id) * 0.1})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.02, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (enemy.poison) {
+      ctx.fillStyle = `rgba(143,211,58,${0.18 + enemy.poison.stacks * 0.05})`;
       ctx.beginPath();
       ctx.arc(x, y, r * 1.02, 0, Math.PI * 2);
       ctx.fill();
@@ -1757,6 +2035,23 @@ function drawProjectiles(ctx, game) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+    } else if (proj.towerType === 'sniper') {
+      // A bright tiny round with a short streak; the tracer effect does the rest.
+      ctx.strokeStyle = 'rgba(242,255,208,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(proj.x - proj.dirX * 14, proj.y - proj.dirY * 14);
+      ctx.lineTo(proj.x, proj.y);
+      ctx.stroke();
+    } else if (proj.towerType === 'venom') {
+      ctx.fillStyle = '#6fae3a';
+      ctx.beginPath();
+      ctx.ellipse(proj.x, proj.y, 5 * scale, 3.6 * scale, Math.atan2(proj.dirY, proj.dirX), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(198,255,107,0.9)';
+      ctx.beginPath();
+      ctx.arc(proj.x - 1.2, proj.y - 1.2, 1.6 * scale, 0, Math.PI * 2);
+      ctx.fill();
     } else if (proj.towerType === 'mage') {
       ctx.strokeStyle = 'rgba(143,123,255,0.5)'; // trail
       ctx.lineWidth = 4 * scale;
@@ -1775,11 +2070,18 @@ function drawProjectiles(ctx, game) {
       ctx.fill();
     } else {
       // Lob: lift the ball along a sine arc between launch and target,
-      // keeping a shadow on the ground beneath it.
+      // keeping a shadow on the ground beneath it. Mortar shells fly higher.
+      const mortar = proj.towerType === 'mortar';
       const traveled = Math.hypot(proj.x - (proj.startX ?? proj.x), proj.y - (proj.startY ?? proj.y));
       const remaining = Math.hypot(proj.lastTarget.x - proj.x, proj.lastTarget.y - proj.y);
       const total = traveled + remaining || 1;
-      const lift = Math.sin((traveled / total) * Math.PI) * Math.min(42, total * 0.3);
+      const lift = Math.sin((traveled / total) * Math.PI) * Math.min(mortar ? 110 : 42, total * (mortar ? 0.55 : 0.3));
+      if (mortar) {
+        ctx.fillStyle = 'rgba(255,140,51,0.35)';
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y - lift, 8 * scale, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.fillStyle = 'rgba(0,0,0,0.25)';
       ctx.beginPath();
       ctx.ellipse(proj.x, proj.y + 3, 4 * scale, 2 * scale, 0, 0, Math.PI * 2);
@@ -1797,33 +2099,174 @@ function drawProjectiles(ctx, game) {
 }
 
 function drawParticleList(ctx, particles, glow = false) {
+  const opaque = new Set(['smoke', 'scorch', 'crater', 'frostpatch', 'puddle', 'leaf', 'snow', 'ash', 'shard', 'drop']);
   for (const p of particles) {
     const frac = Math.max(0, p.life / p.maxLife);
     ctx.globalAlpha = frac;
-    // Sparks and rings add light; smoke and scorch stay opaque.
-    ctx.globalCompositeOperation = glow && p.shape !== 'smoke' && p.shape !== 'scorch' ? 'lighter' : 'source-over';
-    if (p.shape === 'ring') {
-      ctx.strokeStyle = p.color;
-      ctx.lineWidth = 3 * frac;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * (1 - frac) + 6, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (p.shape === 'smoke') {
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * (1.6 - frac * 0.6), 0, Math.PI * 2);
-      ctx.fill();
-    } else if (p.shape === 'scorch') {
-      ctx.globalAlpha = Math.min(0.8, frac * 1.5);
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, p.size, p.size * 0.55, 0, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size * frac, 0, Math.PI * 2);
-      ctx.fill();
+    ctx.globalCompositeOperation = glow && !opaque.has(p.shape) ? 'lighter' : 'source-over';
+    switch (p.shape) {
+      case 'ring':
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = 3 * frac;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (1 - frac) + 6, 0, Math.PI * 2);
+        ctx.stroke();
+        break;
+      case 'flash': {
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * (1.4 - frac * 0.4));
+        g.addColorStop(0, p.color);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (1.4 - frac * 0.4), 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'smoke':
+        ctx.globalAlpha = frac * 0.9;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (1 + (1 - frac) * (p.grow || 1) * 0.8), 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'spark': {
+        const speed = Math.hypot(p.vx, p.vy) || 1;
+        const len = Math.min(16, 3 + speed * 0.05);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = Math.max(0.6, p.size * frac);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x - (p.vx / speed) * len, p.y - (p.vy / speed) * len);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        break;
+      }
+      case 'ember':
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = frac * 0.35;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 2.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = frac;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * (0.5 + frac * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'shard': {
+        ctx.fillStyle = p.color;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        const sz = p.size * (0.6 + frac * 0.4);
+        ctx.beginPath();
+        ctx.moveTo(0, -sz);
+        ctx.lineTo(sz * 0.9, sz * 0.7);
+        ctx.lineTo(-sz * 0.9, sz * 0.7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'star': {
+        ctx.fillStyle = p.color;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        const sz = p.size * (0.5 + frac * 0.5) * 1.6;
+        ctx.beginPath();
+        for (let k = 0; k < 8; k++) {
+          const rad = k % 2 ? sz * 0.4 : sz;
+          const a = (k / 8) * Math.PI * 2;
+          ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'drop':
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, p.size * 0.7, p.size * 1.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'tracer':
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.size * frac * 1.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x2, p.y2);
+        ctx.stroke();
+        break;
+      case 'scorch':
+      case 'crater':
+        ctx.globalAlpha = Math.min(0.8, frac * 1.5);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, p.size, p.size * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (p.shape === 'crater') {
+          ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, p.size * 0.7, p.size * 0.38, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        break;
+      case 'frostpatch':
+      case 'puddle':
+        ctx.globalAlpha = Math.min(0.9, frac * 1.3);
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, p.size, p.size * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'leaf':
+        ctx.fillStyle = p.color;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, p.size * 1.6, p.size * 0.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+      case 'snow':
+      case 'ash':
+      case 'pollen':
+        ctx.globalAlpha = Math.min(1, frac * 3) * 0.9;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      case 'sand':
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.size;
+        ctx.beginPath();
+        ctx.moveTo(p.x - 14, p.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        break;
+      case 'firefly': {
+        const blink = 0.3 + Math.max(0, Math.sin(p.rot * 0.5 + p.x * 0.05 + p.life * 6)) * 0.7;
+        ctx.globalAlpha = Math.min(1, frac * 3) * blink;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = Math.min(1, frac * 3);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 0.7, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      default:
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * frac, 0, Math.PI * 2);
+        ctx.fill();
     }
   }
   ctx.globalCompositeOperation = 'source-over';
@@ -1831,9 +2274,9 @@ function drawParticleList(ctx, particles, glow = false) {
 }
 
 function drawTexts(ctx, effects) {
-  ctx.font = 'bold 13px sans-serif';
   ctx.textAlign = 'center';
   for (const t of effects.texts) {
+    ctx.font = `bold ${Math.round(13 * (t.scale || 1))}px sans-serif`;
     ctx.globalAlpha = Math.max(0, t.life / t.maxLife);
     ctx.strokeStyle = 'rgba(0,0,0,0.7)';
     ctx.lineWidth = 3;
@@ -1872,23 +2315,46 @@ function drawBanner(ctx, effects, level) {
   if (!banner) return;
   const age = banner.maxLife - banner.life;
   const alpha = Math.min(1, age * 4, banner.life * 2);
+  const pop = age < 0.3 ? 1.25 - 0.25 * (age / 0.3) : 1; // settles in from slightly large
+  const cx = level.width / 2;
+  const cy = level.height / 2 - 40;
   ctx.globalAlpha = Math.max(0, alpha);
-  ctx.font = 'bold 42px Georgia, serif';
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(pop, pop);
   ctx.textAlign = 'center';
-  ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-  ctx.lineWidth = 6;
-  ctx.strokeText(banner.text, level.width / 2, level.height / 2 - 40);
+  ctx.font = 'bold 44px Georgia, serif';
+  ctx.globalCompositeOperation = 'lighter';
   ctx.fillStyle = banner.color;
-  ctx.fillText(banner.text, level.width / 2, level.height / 2 - 40);
+  ctx.globalAlpha = Math.max(0, alpha) * 0.35;
+  ctx.fillText(banner.text, 0, 2); // glow pass
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = Math.max(0, alpha);
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.lineWidth = 7;
+  ctx.strokeText(banner.text, 0, 0);
+  ctx.fillStyle = banner.color;
+  ctx.fillText(banner.text, 0, 0);
+  if (banner.sub) {
+    ctx.font = 'italic 16px Georgia, serif';
+    ctx.lineWidth = 4;
+    ctx.strokeText(banner.sub, 0, 24);
+    ctx.fillStyle = '#f2e3b3';
+    ctx.fillText(banner.sub, 0, 24);
+  }
+  ctx.restore();
   ctx.globalAlpha = 1;
 }
 
 function drawRange(ctx, spot, range) {
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-  ctx.lineWidth = 1.5;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
   ctx.beginPath();
   ctx.arc(spot.x, spot.y, range, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 6]);
+  ctx.lineDashOffset = -performance.now() / 40;
   ctx.stroke();
+  ctx.setLineDash([]);
 }
