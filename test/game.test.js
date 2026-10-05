@@ -5,12 +5,15 @@ import { Game, PHASE } from '../src/game.js';
 // Small deterministic fixture level: a straight 300px path.
 const TOWERS = {
   basic: {
-    id: 'basic', name: 'Basic', cost: 50, range: 100, damage: 10,
-    fireInterval: 1.0, projectileSpeed: 1000, splashRadius: 0,
+    id: 'basic', name: 'Basic', damageType: 'physical', projectileSpeed: 1000,
+    levels: [
+      { cost: 50, damage: 10, range: 100, fireInterval: 1.0, splashRadius: 0 },
+      { cost: 60, damage: 20, range: 110, fireInterval: 0.8, splashRadius: 0 },
+    ],
   },
   bomb: {
-    id: 'bomb', name: 'Bomb', cost: 80, range: 100, damage: 10,
-    fireInterval: 1.0, projectileSpeed: 1000, splashRadius: 60,
+    id: 'bomb', name: 'Bomb', damageType: 'physical', projectileSpeed: 1000,
+    levels: [{ cost: 80, damage: 10, range: 100, fireInterval: 1.0, splashRadius: 60 }],
   },
 };
 

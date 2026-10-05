@@ -55,8 +55,14 @@ export class Effects {
         case 'tower-sold':
           this.spawnSale(event);
           break;
+        case 'tower-upgraded':
+          this.spawnUpgrade(event);
+          break;
+        case 'boss-spawned':
+          this.setBanner(event.name, '#ff6b6b');
+          break;
         case 'wave-started':
-          this.setBanner(`Wave ${event.wave}`, '#f2e3b3');
+          this.setBanner(event.final ? `Final Wave` : `Wave ${event.wave}`, event.final ? '#ff9f45' : '#f2e3b3');
           break;
         case 'game-won':
           this.setBanner('Victory!', '#ffd700');
@@ -339,6 +345,25 @@ export class Effects {
       });
     }
     this.addText(event.x, event.y - 16, `+${event.refund}g`, '#ffd700');
+  }
+
+  spawnUpgrade(event) {
+    // A golden ring and rising sparks as the tower is rebuilt bigger.
+    this.addParticle({ x: event.x, y: event.y - 8, vx: 0, vy: 0, life: 0.45, size: 26, color: '#ffd700', shape: 'ring' });
+    for (let i = 0; i < 12; i++) {
+      const angle = rand(0, Math.PI * 2);
+      this.addParticle({
+        x: event.x + Math.cos(angle) * rand(2, 12),
+        y: event.y + Math.sin(angle) * rand(1, 6),
+        vx: rand(-15, 15),
+        vy: rand(-110, -50),
+        life: rand(0.4, 0.8),
+        size: rand(1.5, 3),
+        color: i % 3 === 0 ? '#ffffff' : '#ffd700',
+        gravity: 80,
+      });
+    }
+    this.addText(event.x, event.y - 30, `Level ${event.level}`, '#ffd700');
   }
 
   scheduleFireworks() {

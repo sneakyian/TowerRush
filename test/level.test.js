@@ -1,66 +1,142 @@
-// End-to-end checks against the real level data: the config is coherent and
-// the level is actually winnable with a straightforward strategy.
+// End-to-end checks against the real level data: every level is coherent,
+// every build spot is useful, and every level is winnable by a sensible
+// mixed strategy — while no single tower type carries the whole campaign.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LEVEL_1, TOWER_TYPES, ENEMY_TYPES } from '../src/config.js';
+import { LEVELS } from '../src/levels.js';
+import { TOWER_TYPES, ENEMY_TYPES, MAX_TOWER_LEVEL } from '../src/config.js';
 import { Game, PHASE } from '../src/game.js';
 import { Path } from '../src/path.js';
+import { playLevel } from './strategy.js';
 
-test('level config is coherent', () => {
-  assert.ok(LEVEL_1.path.length >= 2);
-  assert.ok(LEVEL_1.buildSpots.length > 0);
-  assert.ok(LEVEL_1.waves.length > 0);
-  for (const wave of LEVEL_1.waves) {
-    for (const entry of wave.entries) {
-      assert.ok(ENEMY_TYPES[entry.type], `unknown enemy type: ${entry.type}`);
-      assert.ok(entry.count > 0);
-      assert.ok(entry.interval > 0);
+test('there are five levels with unique ids and names', () => {
+  assert.equal(LEVELS.length, 5);
+  assert.equal(new Set(LEVELS.map((l) => l.id)).size, 5);
+  assert.equal(new Set(LEVELS.map((l) => l.name)).size, 5);
+});
+
+test('every level config is coherent', () => {
+  for (const level of LEVELS) {
+    assert.ok(level.path.length >= 2, `${level.name}: path`);
+    assert.ok(level.buildSpots.length >= 6, `${level.name}: build spots`);
+    assert.ok(level.waves.length >= 6, `${level.name}: waves`);
+    assert.ok(level.theme && level.theme.decor.length > 0, `${level.name}: theme`);
+    for (const wave of level.waves) {
+      for (const entry of wave.entries) {
+        assert.ok(ENEMY_TYPES[entry.type], `${level.name}: unknown enemy type ${entry.type}`);
+        assert.ok(entry.count > 0 && entry.interval > 0);
+      }
     }
   }
   for (const type of Object.values(TOWER_TYPES)) {
-    assert.ok(type.cost > 0 && type.damage > 0 && type.range > 0 && type.fireInterval > 0);
+    assert.equal(type.levels.length, MAX_TOWER_LEVEL);
+    for (let i = 1; i < type.levels.length; i++) {
+      assert.ok(type.levels[i].damage > type.levels[i - 1].damage, `${type.id} tier ${i + 1} should hit harder`);
+      assert.ok(type.levels[i].cost > type.levels[i - 1].cost, `${type.id} tier ${i + 1} should cost more`);
+    }
+  }
+  for (const enemy of Object.values(ENEMY_TYPES)) {
+    assert.ok(enemy.hp > 0 && enemy.speed > 0 && enemy.bounty > 0 && enemy.radius > 0, enemy.id);
+    assert.ok(enemy.armor >= 0 && enemy.armor < 1, `${enemy.id} armor`);
+    assert.ok(enemy.magicResist >= 0 && enemy.magicResist < 1, `${enemy.id} magic resist`);
+    assert.ok(enemy.look && enemy.look.body, `${enemy.id} look`);
   }
 });
 
-test('every build spot can reach the path with at least one tower type', () => {
-  const path = new Path(LEVEL_1.path);
-  const maxRange = Math.max(...Object.values(TOWER_TYPES).map((t) => t.range));
-  for (const spot of LEVEL_1.buildSpots) {
-    let minDist = Infinity;
-    for (let d = 0; d <= path.totalLength; d += 5) {
-      const pos = path.positionAt(d);
-      minDist = Math.min(minDist, Math.hypot(pos.x - spot.x, pos.y - spot.y));
+test('the final wave of every level contains exactly one boss', () => {
+  for (const level of LEVELS) {
+    const last = level.waves[level.waves.length - 1];
+    const bosses = last.entries.filter((e) => ENEMY_TYPES[e.type].boss);
+    assert.equal(bosses.length, 1, `${level.name}: boss entries`);
+    assert.equal(bosses[0].count, 1, `${level.name}: boss count`);
+    for (const wave of level.waves.slice(0, -1)) {
+      assert.ok(!wave.entries.some((e) => ENEMY_TYPES[e.type].boss), `${level.name}: boss before final wave`);
     }
-    assert.ok(
-      minDist < maxRange,
-      `build spot (${spot.x},${spot.y}) is out of range of the path (closest: ${minDist.toFixed(0)}px)`,
+  }
+});
+
+test('every level fields enemies that no other level uses', () => {
+  const seen = new Map();
+  for (const level of LEVELS) {
+    for (const wave of level.waves) {
+      for (const entry of wave.entries) {
+        if (!seen.has(entry.type)) seen.set(entry.type, level.id);
+        assert.equal(seen.get(entry.type), level.id, `${entry.type} appears in more than one level`);
+      }
+    }
+  }
+});
+
+test('every build spot sits close enough to the path for a basic archer', () => {
+  const archerRange = TOWER_TYPES.archer.levels[0].range;
+  for (const level of LEVELS) {
+    const path = new Path(level.path);
+    for (const spot of level.buildSpots) {
+      let minDist = Infinity;
+      for (let d = 0; d <= path.totalLength; d += 4) {
+        const pos = path.positionAt(d);
+        minDist = Math.min(minDist, Math.hypot(pos.x - spot.x, pos.y - spot.y));
+      }
+      assert.ok(
+        minDist <= archerRange * 0.6,
+        `${level.name}: spot (${spot.x},${spot.y}) is ${minDist.toFixed(0)}px from the path`,
+      );
+      assert.ok(minDist >= 30, `${level.name}: spot (${spot.x},${spot.y}) overlaps the path`);
+    }
+  }
+});
+
+test('build spots never sit in water', () => {
+  for (const level of LEVELS) {
+    for (const spot of level.buildSpots) {
+      for (const w of level.water) {
+        const inside = ((spot.x - w.x) / (w.rx + 16)) ** 2 + ((spot.y - w.y) / (w.ry + 16)) ** 2 < 1;
+        assert.ok(!inside, `${level.name}: spot (${spot.x},${spot.y}) is in water`);
+      }
+    }
+  }
+});
+
+test('a boss reaching the castle loses the game outright', () => {
+  const level = LEVELS[0];
+  const game = new Game({
+    ...level,
+    waves: [{ entries: [{ type: 'orcWarlord', count: 1, interval: 1 }] }],
+  });
+  game.startNextWave();
+  for (let t = 0; t < 120 && game.phase === PHASE.WAVE; t += 0.05) game.update(0.05);
+  assert.equal(game.phase, PHASE.LOST);
+  assert.equal(game.lives, 0);
+});
+
+// --- Balance ------------------------------------------------------------------
+
+for (const level of LEVELS) {
+  test(`${level.name} is winnable with a mixed tower strategy`, () => {
+    const result = playLevel(level, { strategy: 'mixed' });
+    assert.equal(
+      result.phase,
+      PHASE.WON,
+      `expected a win, got "${result.phase}" after ${result.wavesCleared}/${level.waves.length} waves ` +
+        `(lives lost per wave: ${result.livesLostPerWave.join(',')}; towers: ${result.towers.join(',')})`,
     );
+    assert.ok(result.lives >= 3, `${level.name}: won with only ${result.lives} lives — too tight`);
+  });
+}
+
+test('no single tower type wins every level (armor and resistance matter)', () => {
+  for (const strategy of ['archersOnly', 'magesOnly', 'cannonsOnly']) {
+    const wins = LEVELS.filter((level) => playLevel(level, { strategy }).phase === PHASE.WON).length;
+    assert.ok(wins < LEVELS.length, `${strategy} beat every level`);
   }
 });
 
-test('the starting gold affords at least one tower before wave 1', () => {
-  const cheapest = Math.min(...Object.values(TOWER_TYPES).map((t) => t.cost));
-  assert.ok(LEVEL_1.startingGold >= cheapest);
-});
-
-test('level 1 is winnable with a simple greedy strategy', () => {
-  const game = new Game(LEVEL_1);
-
-  // Strategy: whenever we can afford an archer tower, build it on the next
-  // free spot. Start each wave as soon as the build phase begins.
-  const step = 1 / 30;
-  let elapsed = 0;
-  while (game.phase !== PHASE.WON && game.phase !== PHASE.LOST && elapsed < 600) {
-    const freeSpot = game.towers.indexOf(null);
-    if (freeSpot !== -1 && game.gold >= TOWER_TYPES.archer.cost) {
-      game.buildTower(freeSpot, 'archer');
-    }
-    if (game.phase === PHASE.BUILD) game.startNextWave();
-    game.update(step);
-    elapsed += step;
+test('levels get harder: later levels need more total damage to clear', () => {
+  const effectiveHp = (level) => level.waves.reduce((sum, wave) => {
+    return sum + wave.entries.reduce((s, e) => s + e.count * ENEMY_TYPES[e.type].hp, 0);
+  }, 0);
+  for (let i = 1; i < LEVELS.length; i++) {
+    assert.ok(effectiveHp(LEVELS[i]) > effectiveHp(LEVELS[i - 1]), `${LEVELS[i].name} should be tougher than ${LEVELS[i - 1].name}`);
   }
-
-  assert.equal(game.phase, PHASE.WON, `expected a win, got "${game.phase}" with ${game.lives} lives`);
-  assert.ok(game.lives > 0);
 });

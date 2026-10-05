@@ -12,7 +12,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Concatenate the modules in dependency order and strip module syntax —
 // in a single script tag they all share one scope.
-const sources = ['config', 'path', 'game', 'effects', 'render', 'main']
+const sources = ['config', 'levels', 'path', 'game', 'effects', 'render', 'main']
   .map((name) => readFileSync(join(root, 'src', `${name}.js`), 'utf8'));
 
 const combined = sources

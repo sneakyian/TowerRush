@@ -7,8 +7,8 @@ import { Effects } from '../src/effects.js';
 
 const TOWERS = {
   basic: {
-    id: 'basic', name: 'Basic', cost: 50, range: 100, damage: 10,
-    fireInterval: 1.0, projectileSpeed: 1000, splashRadius: 0,
+    id: 'basic', name: 'Basic', damageType: 'physical', projectileSpeed: 1000,
+    levels: [{ cost: 50, damage: 10, range: 100, fireInterval: 1.0, splashRadius: 0 }],
   },
 };
 const ENEMIES = {
