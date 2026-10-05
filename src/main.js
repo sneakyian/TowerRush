@@ -116,6 +116,7 @@ function frame(now) {
   }
 
   effects.process(game.drainEvents());
+  effects.ambient(game, dt);
   effects.update(dt);
   render(ctx, game, effects, ui, now / 1000);
   requestAnimationFrame(frame);

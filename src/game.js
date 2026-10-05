@@ -65,6 +65,8 @@ export class Game {
 
     this.gold -= type.cost;
     this.towers[spotIndex] = { typeId, cooldown: 0 };
+    const spot = this.level.buildSpots[spotIndex];
+    this.pushEvent({ type: 'tower-built', x: spot.x, y: spot.y, towerType: typeId });
     return { ok: true };
   }
 
@@ -74,6 +76,8 @@ export class Game {
     const refund = Math.floor(this.towerTypes[tower.typeId].cost * this.level.sellRefund);
     this.gold += refund;
     this.towers[spotIndex] = null;
+    const spot = this.level.buildSpots[spotIndex];
+    this.pushEvent({ type: 'tower-sold', x: spot.x, y: spot.y, refund });
     return { ok: true, refund };
   }
 
@@ -125,13 +129,17 @@ export class Game {
         radius: type.radius,
         dist: 0,
         alive: true,
+        flash: 0, // seconds of white hit-flash left, for rendering
       });
+      const pos = this.path.positionAt(0);
+      this.pushEvent({ type: 'enemy-spawned', x: pos.x, y: pos.y, enemyType: typeId });
     }
   }
 
   moveEnemies(dt) {
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
+      enemy.flash = Math.max(0, (enemy.flash || 0) - dt);
       enemy.dist += enemy.speed * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
@@ -243,6 +251,7 @@ export class Game {
 
   damageEnemy(enemy, amount) {
     enemy.hp -= amount;
+    enemy.flash = 0.12;
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;

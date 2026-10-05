@@ -130,10 +130,104 @@ test('clear removes everything', () => {
   const effects = new Effects({ enemyTypes: ENEMIES });
   effects.process([
     { type: 'enemy-died', x: 0, y: 0, bounty: 5, enemyType: 'grunt' },
-    { type: 'game-lost' },
+    { type: 'hit', x: 0, y: 0, towerType: 'cannon', splash: 40 },
+    { type: 'game-won' },
   ]);
   effects.clear();
   assert.equal(effects.particles.length, 0);
+  assert.equal(effects.groundParticles.length, 0);
   assert.equal(effects.texts.length, 0);
   assert.equal(effects.banner, null);
+  assert.equal(effects.scheduled.length, 0);
+});
+
+// --- Build/sell/spawn events and the effects they drive --------------------
+
+test('building and selling a tower emit events with the spot position', () => {
+  const game = makeGame();
+  game.buildTower(0, 'basic');
+  const built = game.events.find((e) => e.type === 'tower-built');
+  assert.deepEqual(built, { type: 'tower-built', x: 150, y: 30, towerType: 'basic' });
+  game.sellTower(0);
+  const sold = game.events.find((e) => e.type === 'tower-sold');
+  assert.deepEqual(sold, { type: 'tower-sold', x: 150, y: 30, refund: 25 });
+});
+
+test('spawning an enemy emits enemy-spawned at the path start', () => {
+  const game = makeGame();
+  game.startNextWave();
+  game.update(0.01);
+  const spawned = game.events.find((e) => e.type === 'enemy-spawned');
+  assert.deepEqual(spawned, { type: 'enemy-spawned', x: 0, y: 0, enemyType: 'grunt' });
+});
+
+test('taking damage sets a hit flash that decays over time', () => {
+  const game = makeGame();
+  game.buildTower(0, 'basic');
+  // A durable enemy parked in range so one 10-damage arrow leaves it alive.
+  const enemy = { id: 1, typeId: 'grunt', hp: 100, maxHp: 100, speed: 0, bounty: 7, radius: 8, dist: 150, alive: true, flash: 0 };
+  game.enemies.push(enemy);
+  game.update(0.05); // tower fires at t=0 and the 1000px/s arrow lands this tick
+  assert.ok(enemy.hp < enemy.maxHp, 'enemy was hit');
+  const flashAfterHit = enemy.flash;
+  assert.ok(flashAfterHit > 0, 'flash set on hit');
+  game.update(0.05);
+  assert.ok(enemy.flash < flashAfterHit, 'flash decays');
+  run(game, 0.3);
+  assert.equal(enemy.flash, 0);
+});
+
+test('tower construction and sale spawn particles and refund text', () => {
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  effects.process([{ type: 'tower-built', x: 10, y: 10, towerType: 'basic' }]);
+  assert.ok(effects.particles.length >= 10);
+  effects.process([{ type: 'tower-sold', x: 10, y: 10, refund: 25 }]);
+  assert.ok(effects.texts.some((t) => t.text === '+25g'));
+});
+
+test('a cannon hit leaves a long-lived scorch mark on the ground layer', () => {
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  effects.process([{ type: 'hit', x: 50, y: 60, towerType: 'cannon', splash: 40 }]);
+  const scorch = effects.groundParticles.find((p) => p.shape === 'scorch');
+  assert.ok(scorch, 'scorch mark added');
+  for (let i = 0; i < 40; i++) effects.update(0.05); // 2s: scorch outlives the blast
+  assert.equal(effects.particles.length, 0);
+  assert.ok(effects.groundParticles.some((p) => p.shape === 'scorch'));
+  for (let i = 0; i < 60; i++) effects.update(0.05); // another 3s: gone
+  assert.equal(effects.groundParticles.length, 0);
+});
+
+test('a leak draws a red shockwave ring', () => {
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  effects.process([{ type: 'enemy-leaked', x: 300, y: 0 }]);
+  assert.ok(effects.particles.some((p) => p.shape === 'ring'));
+  assert.ok(effects.texts.some((t) => t.text === '-1 life'));
+});
+
+test('victory schedules fireworks that burst over time', () => {
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  effects.process([{ type: 'game-won' }]);
+  assert.ok(effects.scheduled.length > 0, 'fireworks scheduled');
+  assert.equal(effects.particles.length, 0, 'none burst yet');
+  for (let i = 0; i < 20; i++) effects.update(0.05); // 1s: first bursts go off
+  assert.ok(effects.particles.length > 0, 'fireworks burst');
+  for (let i = 0; i < 80; i++) effects.update(0.05); // 4s more: all fired
+  assert.equal(effects.scheduled.length, 0);
+});
+
+test('ambient effects kick up dust under walking enemies', () => {
+  const game = makeGame();
+  game.startNextWave();
+  game.update(0.01);
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  for (let i = 0; i < 40; i++) effects.ambient(game, 0.05); // 2s of walking
+  assert.ok(effects.groundParticles.length > 0, 'footstep dust spawned');
+});
+
+test('ambient effects trail sparkles behind mage bolts', () => {
+  const game = makeGame();
+  game.projectiles.push({ x: 10, y: 10, prevX: 10, prevY: 10, towerType: 'mage', dirX: 1, dirY: 0 });
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  for (let i = 0; i < 40; i++) effects.ambient(game, 0.05);
+  assert.ok(effects.particles.length > 0, 'trail sparkles spawned');
 });

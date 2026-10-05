@@ -1,5 +1,9 @@
-// Visual effects state: particles, floating texts, and banners.
-// No DOM or canvas access — the renderer draws this, tests drive it headless.
+// Visual effects state: particles, floating texts, banners, and scheduled
+// bursts (fireworks). No DOM or canvas access — the renderer draws this,
+// tests drive it headless.
+//
+// Two particle layers: `groundParticles` render under enemies (scorch marks,
+// dust) and `particles` render on top (sparks, smoke, debris).
 
 import { ENEMY_TYPES } from './config.js';
 
@@ -10,15 +14,20 @@ function rand(min, max) {
 export class Effects {
   constructor({ enemyTypes = ENEMY_TYPES } = {}) {
     this.enemyTypes = enemyTypes;
-    this.particles = []; // {x,y,vx,vy,life,maxLife,size,color,shape,gravity}
-    this.texts = [];     // {x,y,text,color,life,maxLife}
-    this.banner = null;  // {text,color,life,maxLife}
+    this.particles = [];       // {x,y,vx,vy,life,maxLife,size,color,shape,gravity}
+    this.groundParticles = []; // same shape, drawn beneath enemies
+    this.texts = [];           // {x,y,text,color,life,maxLife}
+    this.banner = null;        // {text,color,life,maxLife}
+    this.scheduled = [];       // [{delay, x, y, kind}] future bursts
+    this.dustTimer = 0;        // throttles ambient footstep dust
   }
 
   clear() {
     this.particles = [];
+    this.groundParticles = [];
     this.texts = [];
     this.banner = null;
+    this.scheduled = [];
   }
 
   // Turn gameplay events (from Game.drainEvents()) into visual effects.
@@ -34,14 +43,24 @@ export class Effects {
         case 'enemy-died':
           this.spawnDeath(event);
           break;
+        case 'enemy-spawned':
+          this.spawnEmerge(event);
+          break;
         case 'enemy-leaked':
-          this.addText(event.x, event.y, '-1 life', '#e25555');
+          this.spawnLeak(event);
+          break;
+        case 'tower-built':
+          this.spawnConstruction(event);
+          break;
+        case 'tower-sold':
+          this.spawnSale(event);
           break;
         case 'wave-started':
           this.setBanner(`Wave ${event.wave}`, '#f2e3b3');
           break;
         case 'game-won':
           this.setBanner('Victory!', '#ffd700');
+          this.scheduleFireworks();
           break;
         case 'game-lost':
           this.setBanner('Defeat!', '#e25555');
@@ -50,61 +69,120 @@ export class Effects {
     }
   }
 
-  spawnMuzzle(event) {
-    if (event.towerType === 'cannon') {
-      // Flash and smoke out of the barrel.
-      for (let i = 0; i < 6; i++) {
-        const spread = event.angle + rand(-0.4, 0.4);
-        this.addParticle({
-          x: event.x + Math.cos(event.angle) * 14,
-          y: event.y - 10 + Math.sin(event.angle) * 14,
-          vx: Math.cos(spread) * rand(40, 110),
-          vy: Math.sin(spread) * rand(40, 110),
-          life: rand(0.15, 0.3),
-          size: rand(2, 4),
-          color: i < 3 ? '#ffd97a' : '#9aa0a6',
+  // Continuous effects driven by live game state rather than events:
+  // footstep dust under walkers and trails behind projectiles.
+  ambient(game, dt) {
+    this.dustTimer -= dt;
+    if (this.dustTimer <= 0) {
+      this.dustTimer = 0.09;
+      for (const enemy of game.enemies) {
+        if (!enemy.alive || Math.random() > 0.4) continue;
+        const pos = game.path.positionAt(enemy.dist);
+        this.addGroundParticle({
+          x: pos.x + rand(-4, 4),
+          y: pos.y + enemy.radius * 0.6,
+          vx: rand(-8, 8),
+          vy: rand(-14, -4),
+          life: rand(0.3, 0.55),
+          size: rand(1.5, 3),
+          color: '#b8a67e',
+          shape: 'smoke',
         });
       }
-    } else if (event.towerType === 'mage') {
-      for (let i = 0; i < 4; i++) {
+    }
+    for (const proj of game.projectiles) {
+      if (proj.towerType === 'mage' && Math.random() < dt * 40) {
         this.addParticle({
-          x: event.x,
-          y: event.y - 26,
-          vx: rand(-30, 30),
-          vy: rand(-30, 30),
-          life: rand(0.2, 0.4),
+          x: proj.x + rand(-2, 2),
+          y: proj.y + rand(-2, 2),
+          vx: rand(-12, 12),
+          vy: rand(-12, 12),
+          life: rand(0.2, 0.35),
+          size: rand(1, 2.2),
+          color: Math.random() < 0.5 ? '#b9a7ff' : '#e6dcff',
+        });
+      } else if (proj.towerType === 'cannon' && Math.random() < dt * 25) {
+        this.addParticle({
+          x: proj.x,
+          y: proj.y,
+          vx: rand(-6, 6),
+          vy: rand(-14, -4),
+          life: rand(0.25, 0.45),
           size: rand(1.5, 3),
-          color: '#b9a7ff',
+          color: '#8d949b',
+          shape: 'smoke',
         });
       }
     }
   }
 
+  spawnMuzzle(event) {
+    if (event.towerType === 'cannon') {
+      // Flash and smoke out of the barrel.
+      for (let i = 0; i < 8; i++) {
+        const spread = event.angle + rand(-0.45, 0.45);
+        this.addParticle({
+          x: event.x + Math.cos(event.angle) * 14,
+          y: event.y - 10 + Math.sin(event.angle) * 14,
+          vx: Math.cos(spread) * rand(50, 130),
+          vy: Math.sin(spread) * rand(50, 130),
+          life: rand(0.15, 0.3),
+          size: rand(2, 4.5),
+          color: i < 4 ? '#ffd97a' : '#9aa0a6',
+          shape: i < 4 ? 'dot' : 'smoke',
+        });
+      }
+    } else if (event.towerType === 'mage') {
+      for (let i = 0; i < 5; i++) {
+        this.addParticle({
+          x: event.x,
+          y: event.y - 26,
+          vx: rand(-35, 35),
+          vy: rand(-35, 35),
+          life: rand(0.2, 0.4),
+          size: rand(1.5, 3),
+          color: '#b9a7ff',
+        });
+      }
+    } else {
+      // A tiny puff of dust off the bowstring.
+      this.addParticle({
+        x: event.x,
+        y: event.y - 20,
+        vx: Math.cos(event.angle) * 30,
+        vy: Math.sin(event.angle) * 30,
+        life: 0.15,
+        size: 1.6,
+        color: '#e8e2d4',
+      });
+    }
+  }
+
   spawnImpact(event) {
     if (event.towerType === 'cannon') {
-      // Explosion: fireball debris, rising smoke, and a shockwave ring.
-      for (let i = 0; i < 14; i++) {
+      // Explosion: fireball debris, rising smoke, shockwave ring, scorch mark.
+      for (let i = 0; i < 18; i++) {
         const angle = rand(0, Math.PI * 2);
-        const speed = rand(50, 170);
+        const speed = rand(50, 190);
         this.addParticle({
           x: event.x,
           y: event.y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          life: rand(0.3, 0.6),
+          life: rand(0.3, 0.65),
           size: rand(2, 5),
-          color: ['#ffd97a', '#ff9f45', '#ff6b35'][i % 3],
-          gravity: 160,
+          color: ['#ffd97a', '#ff9f45', '#ff6b35', '#ffe8b0'][i % 4],
+          gravity: 170,
         });
       }
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 6; i++) {
         this.addParticle({
-          x: event.x + rand(-8, 8),
-          y: event.y + rand(-8, 8),
-          vx: rand(-15, 15),
-          vy: rand(-45, -15),
-          life: rand(0.5, 0.9),
-          size: rand(5, 9),
+          x: event.x + rand(-9, 9),
+          y: event.y + rand(-9, 9),
+          vx: rand(-18, 18),
+          vy: rand(-50, -18),
+          life: rand(0.5, 1.0),
+          size: rand(5, 10),
           color: '#7d848a',
           shape: 'smoke',
         });
@@ -119,30 +197,51 @@ export class Effects {
         color: '#ffb347',
         shape: 'ring',
       });
+      this.addGroundParticle({
+        x: event.x,
+        y: event.y,
+        vx: 0,
+        vy: 0,
+        life: 4,
+        size: rand(10, 14),
+        color: 'rgba(40,32,22,0.55)',
+        shape: 'scorch',
+      });
     } else if (event.towerType === 'mage') {
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 10; i++) {
         const angle = rand(0, Math.PI * 2);
-        const speed = rand(30, 90);
+        const speed = rand(30, 100);
         this.addParticle({
           x: event.x,
           y: event.y,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          life: rand(0.25, 0.45),
+          life: rand(0.25, 0.5),
           size: rand(1.5, 3.5),
           color: i % 2 ? '#8f7bff' : '#e6dcff',
         });
       }
+      this.addParticle({
+        x: event.x,
+        y: event.y,
+        vx: 0,
+        vy: 0,
+        life: 0.2,
+        size: 12,
+        color: '#b9a7ff',
+        shape: 'ring',
+      });
     } else {
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         this.addParticle({
           x: event.x,
           y: event.y,
-          vx: rand(-40, 40),
-          vy: rand(-40, 40),
-          life: rand(0.15, 0.25),
+          vx: rand(-50, 50),
+          vy: rand(-50, 10),
+          life: rand(0.15, 0.3),
           size: rand(1.5, 2.5),
-          color: '#e8e2d4',
+          color: i % 2 ? '#e8e2d4' : '#c9a86a',
+          gravity: 120,
         });
       }
     }
@@ -150,25 +249,134 @@ export class Effects {
 
   spawnDeath(event) {
     const color = this.enemyTypes[event.enemyType]?.color ?? '#888';
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
       const angle = rand(0, Math.PI * 2);
-      const speed = rand(25, 85);
+      const speed = rand(25, 95);
       this.addParticle({
         x: event.x,
         y: event.y,
         vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed - 30,
-        life: rand(0.3, 0.55),
+        vy: Math.sin(angle) * speed - 35,
+        life: rand(0.3, 0.6),
         size: rand(2, 4),
         color: i % 3 === 0 ? '#ddd6c5' : color,
-        gravity: 120,
+        gravity: 130,
       });
     }
+    // A coin that pops up and falls with the bounty text.
+    this.addParticle({
+      x: event.x,
+      y: event.y,
+      vx: rand(-15, 15),
+      vy: -90,
+      life: 0.6,
+      size: 3,
+      color: '#ffd700',
+      gravity: 260,
+    });
     this.addText(event.x, event.y - 12, `+${event.bounty}g`, '#ffd700');
+  }
+
+  spawnEmerge(event) {
+    // Dust kicked up as an enemy steps out of the cave.
+    for (let i = 0; i < 4; i++) {
+      this.addParticle({
+        x: event.x + rand(-6, 10),
+        y: event.y + rand(-6, 6),
+        vx: rand(5, 30),
+        vy: rand(-18, -4),
+        life: rand(0.3, 0.5),
+        size: rand(2, 4),
+        color: '#b8a67e',
+        shape: 'smoke',
+      });
+    }
+  }
+
+  spawnLeak(event) {
+    this.addText(event.x, event.y, '-1 life', '#e25555');
+    this.addParticle({
+      x: event.x,
+      y: event.y,
+      vx: 0,
+      vy: 0,
+      life: 0.4,
+      size: 22,
+      color: '#e25555',
+      shape: 'ring',
+    });
+  }
+
+  spawnConstruction(event) {
+    // Dust and stone chips around a freshly built tower.
+    for (let i = 0; i < 10; i++) {
+      const angle = rand(0, Math.PI * 2);
+      this.addParticle({
+        x: event.x + Math.cos(angle) * rand(4, 14),
+        y: event.y + Math.sin(angle) * rand(2, 8),
+        vx: Math.cos(angle) * rand(20, 60),
+        vy: rand(-70, -20),
+        life: rand(0.3, 0.6),
+        size: rand(2, 4),
+        color: i % 3 === 0 ? '#9aa1a8' : '#c2b391',
+        gravity: 220,
+        shape: i % 2 ? 'dot' : 'smoke',
+      });
+    }
+  }
+
+  spawnSale(event) {
+    for (let i = 0; i < 6; i++) {
+      this.addParticle({
+        x: event.x + rand(-8, 8),
+        y: event.y + rand(-10, 0),
+        vx: rand(-20, 20),
+        vy: rand(-80, -40),
+        life: rand(0.4, 0.6),
+        size: rand(2, 3),
+        color: '#ffd700',
+        gravity: 200,
+      });
+    }
+    this.addText(event.x, event.y - 16, `+${event.refund}g`, '#ffd700');
+  }
+
+  scheduleFireworks() {
+    // A short celebratory volley across the upper half of the map.
+    for (let i = 0; i < 6; i++) {
+      this.scheduled.push({
+        delay: 0.3 + i * 0.45,
+        x: rand(120, 680),
+        y: rand(60, 220),
+        kind: 'firework',
+      });
+    }
+  }
+
+  spawnFirework(x, y) {
+    const hue = ['#ffd700', '#7bd47b', '#7badff', '#ff8fb3', '#c9a1ff'][Math.floor(rand(0, 5))];
+    for (let i = 0; i < 22; i++) {
+      const angle = (i / 22) * Math.PI * 2;
+      const speed = rand(60, 120);
+      this.addParticle({
+        x,
+        y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: rand(0.5, 0.9),
+        size: rand(1.5, 3),
+        color: i % 4 === 0 ? '#ffffff' : hue,
+        gravity: 60,
+      });
+    }
   }
 
   addParticle({ x, y, vx, vy, life, size, color, shape = 'dot', gravity = 0 }) {
     this.particles.push({ x, y, vx, vy, life, maxLife: life, size, color, shape, gravity });
+  }
+
+  addGroundParticle({ x, y, vx, vy, life, size, color, shape = 'dot', gravity = 0 }) {
+    this.groundParticles.push({ x, y, vx, vy, life, maxLife: life, size, color, shape, gravity });
   }
 
   addText(x, y, text, color) {
@@ -180,13 +388,16 @@ export class Effects {
   }
 
   update(dt) {
-    for (const p of this.particles) {
-      p.life -= dt;
-      p.vy += p.gravity * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
+    for (const list of [this.particles, this.groundParticles]) {
+      for (const p of list) {
+        p.life -= dt;
+        p.vy += p.gravity * dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+      }
     }
     this.particles = this.particles.filter((p) => p.life > 0);
+    this.groundParticles = this.groundParticles.filter((p) => p.life > 0);
 
     for (const t of this.texts) {
       t.life -= dt;
@@ -198,5 +409,11 @@ export class Effects {
       this.banner.life -= dt;
       if (this.banner.life <= 0) this.banner = null;
     }
+
+    for (const s of this.scheduled) {
+      s.delay -= dt;
+      if (s.delay <= 0 && s.kind === 'firework') this.spawnFirework(s.x, s.y);
+    }
+    this.scheduled = this.scheduled.filter((s) => s.delay > 0);
   }
 }
