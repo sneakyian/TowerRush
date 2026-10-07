@@ -243,3 +243,27 @@ test('a flamethrower shot spawns fire and smoke along the jet, and hits leave fi
   effects.process([{ type: 'hit', x: 160, y: 100, towerType: 'flame', level: 1, splash: 0 }]);
   assert.ok(effects.particles.filter((p) => p.shape === 'fire').length >= 3);
 });
+
+test('each tower family has its own muzzle and impact effects', () => {
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  effects.process([{ type: 'shot', x: 100, y: 100, angle: 0, towerType: 'mage', level: 0, targetX: 160, targetY: 100 }]);
+  assert.ok(effects.particles.some((p) => p.shape === 'ring'), 'mage shot bursts a rune ring');
+  effects.clear();
+  effects.process([{ type: 'hit', x: 100, y: 100, towerType: 'frost', level: 0, splash: 0 }]);
+  assert.ok(effects.particles.some((p) => p.shape === 'flake'), 'frost hit scatters snowflakes');
+  assert.ok(effects.groundParticles.some((p) => p.shape === 'frostpatch'));
+  effects.clear();
+  effects.process([{ type: 'hit', x: 100, y: 100, towerType: 'archer', level: 0, splash: 0 }]);
+  assert.ok(effects.particles.some((p) => p.shape === 'splinter'), 'arrow hit throws splinters');
+  effects.clear();
+  effects.process([{ type: 'shot', x: 100, y: 100, angle: 0, towerType: 'sniper', level: 1, targetX: 300, targetY: 100 }]);
+  assert.ok(effects.particles.some((p) => p.shape === 'casing'), 'sniper ejects a casing');
+  assert.ok(effects.particles.some((p) => p.shape === 'tracer'));
+  effects.clear();
+  effects.process([{ type: 'zap', points: [{ x: 0, y: 0 }, { x: 40, y: 0 }, { x: 80, y: 10 }], towerType: 'tesla', level: 0 }]);
+  assert.equal(effects.bolts.length, 1);
+  assert.ok(effects.particles.some((p) => p.shape === 'bolt'), 'lightning crackles at each strike');
+  effects.clear();
+  effects.process([{ type: 'hit', x: 100, y: 100, towerType: 'venom', level: 0, splash: 0 }]);
+  assert.ok(effects.particles.some((p) => p.shape === 'bubble'), 'acid bubbles');
+});

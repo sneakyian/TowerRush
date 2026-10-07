@@ -310,7 +310,7 @@ export class Game {
   // Lightning hits the target, then arcs to the nearest untouched enemy
   // within chainRadius, losing damage with every jump.
   chainLightning(spot, target, stats, type, tower, boost = 1) {
-    const points = [{ x: spot.x, y: spot.y - 26 }];
+    const points = [{ x: spot.x, y: spot.y - 35 - tower.level * 5 }]; // the coil's sphere
     const struck = new Set();
     let current = target;
     let damage = stats.damage * boost;

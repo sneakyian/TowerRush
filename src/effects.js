@@ -172,6 +172,25 @@ export class Effects {
           life: 0.5, size: 2, color: '#8fd33a', shape: 'drop', gravity: 180,
         });
       }
+      if (tower.typeId === 'venom' && Math.random() < dt * 3) {
+        this.addParticle({ x: spot.x + rand(-8, 8), y: spot.y - 6, vx: rand(-3, 3), vy: rand(-22, -12), life: rand(0.8, 1.4), size: rand(1.2, 2.2), color: 'rgba(198,255,107,0.8)', shape: 'bubble', wobble: 10 });
+      }
+      if (tower.typeId === 'tesla' && Math.random() < dt * 6) {
+        const a = rand(0, Math.PI * 2);
+        const sy = spot.y - 35 - tower.level * 5;
+        this.addParticle({ x: spot.x + Math.cos(a) * 7, y: sy + Math.sin(a) * 6, vx: Math.cos(a) * 20, vy: Math.sin(a) * 20, life: rand(0.1, 0.22), size: rand(0.8, 1.4), color: '#dff3ff', shape: 'bolt', spin: rand(-20, 20) });
+      }
+      if (tower.typeId === 'mage' && Math.random() < dt * 5) {
+        const oy = spot.y - 40 - tower.level * 7;
+        this.addParticle({ x: spot.x + rand(-8, 8), y: oy + rand(-4, 4), vx: rand(-6, 6), vy: rand(-14, -4), life: rand(0.5, 0.9), size: rand(0.8, 1.6), color: pick(['#e6dcff', '#b9a7ff']), shape: 'star', spin: rand(-4, 4) });
+      }
+      if (tower.typeId === 'frost' && Math.random() < dt * 4) {
+        this.addParticle({ x: spot.x + rand(-10, 10), y: spot.y - 20 + rand(-10, 10), vx: rand(-5, 5), vy: rand(-10, -3), life: rand(0.8, 1.4), size: rand(0.8, 1.4), color: '#ffffff', shape: 'flake', spin: rand(-3, 3), wobble: 8 });
+      }
+      if (tower.typeId === 'laser' && tower.beamTargetId && game.beamMultiplier(tower) > 2 && Math.random() < dt * 8) {
+        const hy = spot.y - 33 - tower.level * 5;
+        this.addParticle({ x: spot.x + rand(-6, 6), y: hy + rand(-4, 4), vx: rand(-6, 6), vy: rand(-30, -16), life: rand(0.3, 0.5), size: rand(2, 4), color: 'rgba(255,79,216,0.5)', shape: 'glow', grow: 1.5 });
+      }
     });
 
     // Projectile trails.
@@ -255,7 +274,16 @@ export class Effects {
 
   spawnMuzzle(event) {
     const t = event.towerType;
+    const level = event.level || 0;
     if (t === 'cannon' || t === 'mortar') {
+      // Fire cone out of the muzzle and a smoke ring that hangs in the air.
+      const mx = event.x + Math.cos(event.angle) * 16;
+      const my = event.y - 10 + Math.sin(event.angle) * 16;
+      for (let i = 0; i < 5; i++) {
+        const spread = event.angle + rand(-0.3, 0.3);
+        this.addParticle({ x: mx, y: my, vx: Math.cos(spread) * rand(90, 190), vy: Math.sin(spread) * rand(90, 190), life: rand(0.1, 0.2), size: rand(3, 5) + level, color: pick(['#ffb347', '#ff7a2a', '#ffd97a']), shape: 'fire', drag: 4, grow: 1.4 });
+      }
+      this.addParticle({ x: mx, y: my, vx: Math.cos(event.angle) * 30, vy: Math.sin(event.angle) * 30, life: 0.5, size: 12 + level * 2, color: 'rgba(170,170,170,0.5)', shape: 'ring' });
       const n = t === 'mortar' ? 12 : 8;
       for (let i = 0; i < n; i++) {
         const spread = event.angle + rand(-0.5, 0.5);
@@ -269,14 +297,40 @@ export class Effects {
       this.addParticle({ x: event.x + Math.cos(event.angle) * 16, y: event.y - 10 + Math.sin(event.angle) * 16, vx: 0, vy: 0, life: 0.1, size: t === 'mortar' ? 16 : 11, color: '#fff1b8', shape: 'flash' });
       if (t === 'mortar') this.shake = Math.max(this.shake, 2);
     } else if (t === 'sniper') {
-      // Tracer line from nest to target plus a sharp muzzle flash.
+      // Tracer from the nest, sharp muzzle flash, smoke wisp, ejected brass.
+      const ny = event.y - 51 - level * 5;
+      const mx = event.x + Math.cos(event.angle) * 20;
+      const my = ny + Math.sin(event.angle) * 20;
       if (event.targetX !== undefined) {
-        this.addParticle({ x: event.x, y: event.y - 30, x2: event.targetX, y2: event.targetY, vx: 0, vy: 0, life: 0.14, size: 2, color: '#f2ffd0', shape: 'tracer' });
+        this.addParticle({ x: mx, y: my, x2: event.targetX, y2: event.targetY, vx: 0, vy: 0, life: 0.14, size: 2, color: '#f2ffd0', shape: 'tracer' });
       }
-      this.addParticle({ x: event.x + Math.cos(event.angle) * 18, y: event.y - 30 + Math.sin(event.angle) * 18, vx: 0, vy: 0, life: 0.09, size: 9, color: '#ffffff', shape: 'flash' });
+      this.addParticle({ x: mx, y: my, vx: 0, vy: 0, life: 0.09, size: 10, color: '#ffffff', shape: 'flash' });
+      this.addParticle({ x: mx, y: my, vx: Math.cos(event.angle) * 20, vy: Math.sin(event.angle) * 20 - 15, life: 0.5, size: 2.5, color: 'rgba(200,200,200,0.5)', shape: 'smoke', grow: 2 });
+      this.addParticle({ x: event.x, y: ny, vx: -Math.cos(event.angle) * rand(20, 40) + rand(-10, 10), vy: rand(-70, -40), life: 0.7, size: 1.6, color: '#e2b84a', shape: 'casing', spin: rand(-14, 14), gravity: 320 });
     } else if (t === 'mage') {
-      for (let i = 0; i < 6; i++) {
-        this.addParticle({ x: event.x, y: event.y - 26, vx: rand(-40, 40), vy: rand(-40, 40), life: rand(0.2, 0.42), size: rand(1.4, 3), color: pick(['#b9a7ff', '#e6dcff']), shape: 'ember' });
+      // Rune ring bursts from the orb and shards scatter.
+      const oy = event.y - 40 - level * 7;
+      this.addParticle({ x: event.x, y: oy, vx: 0, vy: 0, life: 0.3, size: 14 + level * 2, color: 'rgba(185,167,255,0.8)', shape: 'ring' });
+      this.addParticle({ x: event.x, y: oy, vx: 0, vy: 0, life: 0.15, size: 12, color: 'rgba(230,220,255,0.9)', shape: 'glow' });
+      for (let i = 0; i < 7; i++) {
+        const a = rand(0, Math.PI * 2);
+        this.addParticle({ x: event.x, y: oy, vx: Math.cos(a) * rand(30, 70), vy: Math.sin(a) * rand(30, 70), life: rand(0.25, 0.45), size: rand(1.4, 2.6), color: pick(['#b9a7ff', '#e6dcff', '#ffffff']), shape: i % 3 ? 'ember' : 'star', spin: rand(-8, 8), drag: 2 });
+      }
+    } else if (t === 'frost') {
+      // Snowflakes and a breath of mist burst from the spire's tip.
+      const ty = event.y - 32 - level * 5;
+      for (let i = 0; i < 4; i++) {
+        const a = event.angle + rand(-0.6, 0.6);
+        this.addParticle({ x: event.x, y: ty, vx: Math.cos(a) * rand(30, 70), vy: Math.sin(a) * rand(30, 70) - 10, life: rand(0.3, 0.55), size: rand(1.2, 2.2), color: '#ffffff', shape: 'flake', spin: rand(-6, 6), drag: 2 });
+      }
+      this.addParticle({ x: event.x, y: ty, vx: 0, vy: 0, life: 0.2, size: 10, color: 'rgba(191,233,255,0.7)', shape: 'glow' });
+      this.addParticle({ x: event.x, y: ty + 4, vx: Math.cos(event.angle) * 20, vy: Math.sin(event.angle) * 20, life: 0.5, size: 4, color: 'rgba(223,243,255,0.5)', shape: 'smoke', grow: 2 });
+    } else if (t === 'archer') {
+      // Bowstring twang: a tiny white flick and a puff of fletching down.
+      const dy = event.y - 20 - level * 3;
+      this.addParticle({ x: event.x, y: dy, vx: Math.cos(event.angle) * 30, vy: Math.sin(event.angle) * 30, life: 0.12, size: 1.6, color: '#ffffff', shape: 'dot' });
+      for (let i = 0; i < 2; i++) {
+        this.addParticle({ x: event.x + rand(-3, 3), y: dy, vx: rand(-12, 12), vy: rand(-18, -6), life: rand(0.4, 0.7), size: rand(0.8, 1.3), color: '#e8e2d4', shape: 'dot', drag: 1.5 });
       }
     } else if (t === 'flame') {
       // Fire tongues ride the jet, sooty smoke curls off its end, embers stray.
@@ -306,11 +360,14 @@ export class Effects {
         this.addParticle({ x: ex, y: ey, vx: rand(-40, 40), vy: rand(-80, -30), life: rand(0.4, 0.8), size: rand(1.2, 2), color: pick(['#ffd97a', '#ff9f45']), shape: 'ember', gravity: 40, drag: 0.8 });
       }
     } else if (t === 'venom') {
-      for (let i = 0; i < 3; i++) {
-        this.addParticle({ x: event.x, y: event.y - 14, vx: Math.cos(event.angle) * rand(20, 50) + rand(-15, 15), vy: Math.sin(event.angle) * rand(20, 50), life: 0.3, size: 1.6, color: '#8fd33a', shape: 'drop', gravity: 200 });
+      // Spit spray and a puff of green mist from the maw.
+      const mx = event.x + Math.cos(event.angle) * 10;
+      const my = event.y - 7 + Math.sin(event.angle) * 7;
+      for (let i = 0; i < 4; i++) {
+        this.addParticle({ x: mx, y: my, vx: Math.cos(event.angle) * rand(30, 70) + rand(-15, 15), vy: Math.sin(event.angle) * rand(30, 70) - 10, life: 0.35, size: rand(1.2, 2), color: pick(['#8fd33a', '#c6ff6b']), shape: 'drop', gravity: 220 });
       }
-    } else if (t === 'archer') {
-      this.addParticle({ x: event.x, y: event.y - 20, vx: Math.cos(event.angle) * 30, vy: Math.sin(event.angle) * 30, life: 0.15, size: 1.6, color: '#e8e2d4', shape: 'dot' });
+      this.addParticle({ x: mx, y: my, vx: Math.cos(event.angle) * 25, vy: Math.sin(event.angle) * 25 - 8, life: 0.4, size: 4, color: 'rgba(143,211,58,0.35)', shape: 'smoke', grow: 2 });
+      this.addParticle({ x: mx, y: my, vx: 0, vy: 0, life: 0.12, size: 8, color: 'rgba(198,255,107,0.8)', shape: 'glow' });
     }
   }
 
@@ -319,24 +376,38 @@ export class Effects {
     if (t === 'cannon' || t === 'mortar') {
       this.spawnExplosion(event.x, event.y, t === 'mortar' ? 1.6 : 1, Math.max(20, event.splash));
     } else if (t === 'frost') {
-      for (let i = 0; i < 9; i++) {
+      // Shattering ice: shards, snowflakes, a frost flash, mist and a frozen patch.
+      for (let i = 0; i < 8; i++) {
         const angle = rand(0, Math.PI * 2);
         const speed = rand(30, 110);
         this.addParticle({ x: event.x, y: event.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed - 20, life: rand(0.3, 0.55), size: rand(2, 3.5), color: i % 2 ? '#8fd3ff' : '#ffffff', shape: 'shard', spin: rand(-8, 8), gravity: 120 });
       }
+      for (let i = 0; i < 5; i++) {
+        const angle = rand(0, Math.PI * 2);
+        this.addParticle({ x: event.x, y: event.y, vx: Math.cos(angle) * rand(20, 60), vy: Math.sin(angle) * rand(20, 60) - 30, life: rand(0.5, 0.9), size: rand(1.2, 2.2), color: '#ffffff', shape: 'flake', spin: rand(-5, 5), drag: 1.5, gravity: 30 });
+      }
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.18, size: 14, color: 'rgba(223,243,255,0.9)', shape: 'glow' });
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: -10, life: 0.6, size: 6, color: 'rgba(223,243,255,0.45)', shape: 'smoke', grow: 2 });
       this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.28, size: 16, color: '#bfe9ff', shape: 'ring' });
       this.addGroundParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 2.5, size: rand(9, 13), color: 'rgba(191,233,255,0.45)', shape: 'frostpatch' });
     } else if (t === 'venom') {
+      // Acid splash: drops, a sickly flash, rising bubbles and a puddle.
       for (let i = 0; i < 7; i++) {
         this.addParticle({ x: event.x, y: event.y, vx: rand(-60, 60), vy: rand(-70, -10), life: rand(0.3, 0.5), size: rand(1.5, 2.6), color: pick(['#8fd33a', '#c6ff6b']), shape: 'drop', gravity: 220 });
       }
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.15, size: 12, color: 'rgba(198,255,107,0.8)', shape: 'glow' });
+      for (let i = 0; i < 3; i++) {
+        this.addParticle({ x: event.x + rand(-6, 6), y: event.y + rand(-2, 4), vx: rand(-4, 4), vy: rand(-30, -14), life: rand(0.5, 0.9), size: rand(1.4, 2.6), color: 'rgba(198,255,107,0.9)', shape: 'bubble', wobble: 12 });
+      }
       this.addGroundParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 3, size: rand(8, 12), color: 'rgba(120,200,40,0.4)', shape: 'puddle' });
     } else if (t === 'sniper') {
-      for (let i = 0; i < 8; i++) {
+      // Armour-piercing hit: hard sparks, a white flash and a sharp shock ring.
+      for (let i = 0; i < 10; i++) {
         const angle = rand(0, Math.PI * 2);
-        this.addParticle({ x: event.x, y: event.y, vx: Math.cos(angle) * rand(60, 160), vy: Math.sin(angle) * rand(60, 160), life: rand(0.15, 0.3), size: rand(1, 2), color: '#ffffff', shape: 'spark' });
+        this.addParticle({ x: event.x, y: event.y, vx: Math.cos(angle) * rand(60, 180), vy: Math.sin(angle) * rand(60, 180), life: rand(0.15, 0.3), size: rand(1, 2), color: i % 3 ? '#ffffff' : '#ffd97a', shape: 'spark', gravity: 150 });
       }
-      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.12, size: 12, color: '#f2ffd0', shape: 'flash' });
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.12, size: 14, color: '#f2ffd0', shape: 'flash' });
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.2, size: 10, color: 'rgba(255,255,255,0.9)', shape: 'ring' });
     } else if (t === 'flame') {
       // Fire splashes up the target, embers pop off, and the ground scorches.
       for (let i = 0; i < 3; i++) {
@@ -347,22 +418,34 @@ export class Effects {
         this.addGroundParticle({ x: event.x + rand(-4, 4), y: event.y + rand(2, 8), vx: 0, vy: 0, life: rand(2, 4), size: rand(4, 7), color: 'rgba(30,20,15,0.45)', shape: 'scorch' });
       }
     } else if (t === 'mage') {
+      // Arcane burst: flash, stars, ring and a rune circle glowing on the ground.
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.15, size: 16, color: 'rgba(230,220,255,0.95)', shape: 'glow' });
       for (let i = 0; i < 12; i++) {
         const angle = rand(0, Math.PI * 2);
         const speed = rand(30, 110);
-        this.addParticle({ x: event.x, y: event.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: rand(0.25, 0.5), size: rand(1.4, 3.2), color: i % 2 ? '#8f7bff' : '#e6dcff', shape: i % 3 ? 'ember' : 'star', spin: rand(-6, 6) });
+        this.addParticle({ x: event.x, y: event.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: rand(0.25, 0.5), size: rand(1.4, 3.2), color: i % 2 ? '#8f7bff' : '#e6dcff', shape: i % 3 ? 'ember' : 'star', spin: rand(-6, 6), drag: 1.5 });
       }
-      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.2, size: 12, color: '#b9a7ff', shape: 'ring' });
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.25, size: 14, color: '#b9a7ff', shape: 'ring' });
+      this.addGroundParticle({ x: event.x, y: event.y + 4, vx: 0, vy: 0, life: 0.8, size: 9, color: 'rgba(143,123,255,0.4)', shape: 'puddle' });
     } else {
+      // Arrows and other physical hits: sparks, splinters and a puff of dust.
       for (let i = 0; i < 5; i++) {
         this.addParticle({ x: event.x, y: event.y, vx: rand(-60, 60), vy: rand(-60, 10), life: rand(0.15, 0.3), size: rand(1.2, 2.2), color: i % 2 ? '#e8e2d4' : '#c9a86a', shape: 'spark', gravity: 120 });
       }
+      for (let i = 0; i < 3; i++) {
+        this.addParticle({ x: event.x, y: event.y, vx: rand(-50, 50), vy: rand(-80, -30), life: rand(0.3, 0.5), size: rand(1, 1.6), color: '#5a4322', shape: 'splinter', spin: rand(-12, 12), gravity: 300 });
+      }
+      this.addParticle({ x: event.x, y: event.y + 2, vx: 0, vy: -8, life: 0.3, size: 3, color: 'rgba(200,190,170,0.4)', shape: 'smoke', grow: 1.5 });
     }
   }
 
   // Multi-stage explosion: flash, fireball, sparks, debris, smoke, ring, decal, shake.
   spawnExplosion(x, y, scale, splash) {
     this.addParticle({ x, y, vx: 0, vy: 0, life: 0.12, size: 22 * scale, color: '#fff1b8', shape: 'flash' });
+    for (let i = 0; i < Math.round(6 * scale); i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: x + rand(-4, 4), y: y + rand(-4, 4), vx: Math.cos(a) * rand(20, 80), vy: Math.sin(a) * rand(20, 80) - 40, life: rand(0.2, 0.4), size: rand(4, 7) * scale, color: pick(['#ffb347', '#ff7a2a', '#ff5a1f']), shape: 'fire', drag: 2.5, grow: 1.8 });
+    }
     for (let i = 0; i < 4; i++) {
       this.addParticle({ x: x + rand(-6, 6) * scale, y: y + rand(-6, 6) * scale, vx: rand(-20, 20), vy: rand(-40, -10), life: rand(0.25, 0.4), size: rand(8, 13) * scale, color: pick(['#ff9f45', '#ff6b35', '#ffd97a']), shape: 'smoke', grow: 1.2 });
     }
@@ -386,8 +469,16 @@ export class Effects {
 
   spawnLightning(event) {
     this.bolts.push({ points: event.points, life: 0.18, maxLife: 0.18 });
+    const origin = event.points[0];
+    this.addParticle({ x: origin.x, y: origin.y, vx: 0, vy: 0, life: 0.14, size: 16, color: 'rgba(126,200,255,0.9)', shape: 'glow' });
     for (const p of event.points.slice(1)) {
       this.addParticle({ x: p.x, y: p.y, vx: 0, vy: 0, life: 0.1, size: 9, color: '#dff3ff', shape: 'flash' });
+      for (let i = 0; i < 3; i++) {
+        this.addParticle({ x: p.x + rand(-4, 4), y: p.y + rand(-4, 4), vx: rand(-20, 20), vy: rand(-40, -10), life: rand(0.15, 0.3), size: rand(0.8, 1.4), color: '#dff3ff', shape: 'bolt', spin: rand(-20, 20) });
+      }
+      if (Math.random() < 0.35) {
+        this.addGroundParticle({ x: p.x, y: p.y + 5, vx: 0, vy: 0, life: 1.5, size: rand(3, 5), color: 'rgba(30,30,40,0.4)', shape: 'scorch' });
+      }
       for (let i = 0; i < 6; i++) {
         const angle = rand(0, Math.PI * 2);
         const speed = rand(40, 130);
