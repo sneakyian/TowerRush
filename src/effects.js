@@ -110,10 +110,12 @@ export class Effects {
       if (!enemy.alive) continue;
       const pos = game.path.positionAt(enemy.dist);
       if (enemy.burn && Math.random() < dt * 16) {
+        const fire = Math.random() < 0.35;
         this.addParticle({
           x: pos.x + rand(-enemy.radius * 0.6, enemy.radius * 0.6), y: pos.y - enemy.radius * 0.5,
-          vx: rand(-10, 10), vy: rand(-60, -28),
-          life: rand(0.3, 0.6), size: rand(1.5, 3), color: pick(['#ff9f45', '#ffd97a', '#ff6b35']), shape: 'ember',
+          vx: rand(-10, 10), vy: fire ? rand(-40, -18) : rand(-60, -28),
+          life: fire ? rand(0.25, 0.45) : rand(0.3, 0.6), size: fire ? rand(2.5, 4) : rand(1.5, 3),
+          color: pick(['#ff9f45', '#ffd97a', '#ff6b35']), shape: fire ? 'fire' : 'ember', drag: fire ? 1.5 : 0,
         });
       }
       if (enemy.slow && Math.random() < dt * 9) {
@@ -277,15 +279,31 @@ export class Effects {
         this.addParticle({ x: event.x, y: event.y - 26, vx: rand(-40, 40), vy: rand(-40, 40), life: rand(0.2, 0.42), size: rand(1.4, 3), color: pick(['#b9a7ff', '#e6dcff']), shape: 'ember' });
       }
     } else if (t === 'flame') {
-      for (let i = 0; i < 5; i++) {
-        const spread = event.angle + rand(-0.32, 0.32);
-        const speed = rand(120, 200);
+      // Fire tongues ride the jet, sooty smoke curls off its end, embers stray.
+      const level = event.level || 0;
+      const len = 15 + level * 1.5;
+      const ox = event.x + Math.cos(event.angle) * len;
+      const oy = event.y - 12 + Math.sin(event.angle) * len;
+      const reach = event.targetX !== undefined ? Math.hypot(event.targetX - ox, event.targetY - oy) : 60;
+      for (let i = 0; i < 4; i++) {
+        const spread = event.angle + rand(-0.2, 0.2);
+        const speed = rand(150, 260);
         this.addParticle({
-          x: event.x + Math.cos(event.angle) * 16, y: event.y - 8 + Math.sin(event.angle) * 16,
-          vx: Math.cos(spread) * speed, vy: Math.sin(spread) * speed,
-          life: rand(0.18, 0.34), size: rand(3, 6), color: pick(['#ffd97a', '#ff9f45', '#ff6b35', '#ffe8b0']),
-          shape: 'smoke', drag: 1.5,
+          x: ox, y: oy, vx: Math.cos(spread) * speed, vy: Math.sin(spread) * speed - 8,
+          life: rand(0.22, 0.4), size: rand(2.5, 4.5) + level * 0.5,
+          color: pick(['#ff9a3a', '#ff7a2a', '#ffc45a', '#ff5a1f', '#e8401a']), shape: 'fire', drag: 2.2, grow: 1.6,
         });
+      }
+      const ex = ox + Math.cos(event.angle) * reach;
+      const ey = oy + Math.sin(event.angle) * reach;
+      this.addParticle({
+        x: ex + rand(-6, 6), y: ey + rand(-6, 6),
+        vx: Math.cos(event.angle) * rand(20, 50) + rand(-10, 10), vy: rand(-45, -20),
+        life: rand(0.6, 1.1), size: rand(3, 5), color: pick(['rgba(70,60,60,0.55)', 'rgba(40,35,35,0.5)']),
+        shape: 'smoke', grow: 2.2, drag: 1.2,
+      });
+      if (Math.random() < 0.7) {
+        this.addParticle({ x: ex, y: ey, vx: rand(-40, 40), vy: rand(-80, -30), life: rand(0.4, 0.8), size: rand(1.2, 2), color: pick(['#ffd97a', '#ff9f45']), shape: 'ember', gravity: 40, drag: 0.8 });
       }
     } else if (t === 'venom') {
       for (let i = 0; i < 3; i++) {
@@ -320,8 +338,13 @@ export class Effects {
       }
       this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.12, size: 12, color: '#f2ffd0', shape: 'flash' });
     } else if (t === 'flame') {
-      for (let i = 0; i < 2; i++) {
-        this.addParticle({ x: event.x + rand(-4, 4), y: event.y + rand(-4, 4), vx: rand(-20, 20), vy: rand(-50, -20), life: rand(0.2, 0.45), size: rand(1.5, 2.5), color: '#ffd97a', shape: 'ember' });
+      // Fire splashes up the target, embers pop off, and the ground scorches.
+      for (let i = 0; i < 3; i++) {
+        this.addParticle({ x: event.x + rand(-6, 6), y: event.y + rand(-5, 5), vx: rand(-25, 25), vy: rand(-65, -25), life: rand(0.25, 0.45), size: rand(2, 3.5), color: pick(['#ff9f45', '#ff7a2a', '#ff6b35', '#e8401a']), shape: 'fire', drag: 1.5 });
+      }
+      this.addParticle({ x: event.x + rand(-4, 4), y: event.y + rand(-4, 4), vx: rand(-30, 30), vy: rand(-70, -30), life: rand(0.3, 0.6), size: rand(1.4, 2.4), color: '#ffd97a', shape: 'ember', gravity: 50 });
+      if (Math.random() < 0.2) {
+        this.addGroundParticle({ x: event.x + rand(-4, 4), y: event.y + rand(2, 8), vx: 0, vy: 0, life: rand(2, 4), size: rand(4, 7), color: 'rgba(30,20,15,0.45)', shape: 'scorch' });
       }
     } else if (t === 'mage') {
       for (let i = 0; i < 12; i++) {

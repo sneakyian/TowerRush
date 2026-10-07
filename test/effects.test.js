@@ -232,3 +232,14 @@ test('ambient effects trail sparkles behind mage bolts', () => {
   for (let i = 0; i < 40; i++) effects.ambient(game, 0.05);
   assert.ok(effects.particles.length > 0, 'trail sparkles spawned');
 });
+
+test('a flamethrower shot spawns fire and smoke along the jet, and hits leave fire', () => {
+  const effects = new Effects({ enemyTypes: ENEMIES });
+  effects.process([{ type: 'shot', x: 100, y: 100, angle: 0, towerType: 'flame', level: 1, targetX: 160, targetY: 100 }]);
+  assert.ok(effects.particles.some((p) => p.shape === 'fire'), 'fire tongues spawned');
+  assert.ok(effects.particles.some((p) => p.shape === 'smoke'), 'sooty smoke spawned');
+  // Every fire particle heads toward the target (positive x velocity).
+  assert.ok(effects.particles.filter((p) => p.shape === 'fire').every((p) => p.vx > 0));
+  effects.process([{ type: 'hit', x: 160, y: 100, towerType: 'flame', level: 1, splash: 0 }]);
+  assert.ok(effects.particles.filter((p) => p.shape === 'fire').length >= 3);
+});

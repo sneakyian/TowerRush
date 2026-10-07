@@ -1081,6 +1081,8 @@ class Game {
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
+      tower.targetX = pos.x; // where the shot went, for continuous effects like the flame jet
+      tower.targetY = pos.y;
       tower.cooldown = stats.fireInterval;
       this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level, targetX: pos.x, targetY: pos.y });
 
@@ -1427,10 +1429,12 @@ class Effects {
       if (!enemy.alive) continue;
       const pos = game.path.positionAt(enemy.dist);
       if (enemy.burn && Math.random() < dt * 16) {
+        const fire = Math.random() < 0.35;
         this.addParticle({
           x: pos.x + rand(-enemy.radius * 0.6, enemy.radius * 0.6), y: pos.y - enemy.radius * 0.5,
-          vx: rand(-10, 10), vy: rand(-60, -28),
-          life: rand(0.3, 0.6), size: rand(1.5, 3), color: pick(['#ff9f45', '#ffd97a', '#ff6b35']), shape: 'ember',
+          vx: rand(-10, 10), vy: fire ? rand(-40, -18) : rand(-60, -28),
+          life: fire ? rand(0.25, 0.45) : rand(0.3, 0.6), size: fire ? rand(2.5, 4) : rand(1.5, 3),
+          color: pick(['#ff9f45', '#ffd97a', '#ff6b35']), shape: fire ? 'fire' : 'ember', drag: fire ? 1.5 : 0,
         });
       }
       if (enemy.slow && Math.random() < dt * 9) {
@@ -1594,15 +1598,31 @@ class Effects {
         this.addParticle({ x: event.x, y: event.y - 26, vx: rand(-40, 40), vy: rand(-40, 40), life: rand(0.2, 0.42), size: rand(1.4, 3), color: pick(['#b9a7ff', '#e6dcff']), shape: 'ember' });
       }
     } else if (t === 'flame') {
-      for (let i = 0; i < 5; i++) {
-        const spread = event.angle + rand(-0.32, 0.32);
-        const speed = rand(120, 200);
+      // Fire tongues ride the jet, sooty smoke curls off its end, embers stray.
+      const level = event.level || 0;
+      const len = 15 + level * 1.5;
+      const ox = event.x + Math.cos(event.angle) * len;
+      const oy = event.y - 12 + Math.sin(event.angle) * len;
+      const reach = event.targetX !== undefined ? Math.hypot(event.targetX - ox, event.targetY - oy) : 60;
+      for (let i = 0; i < 4; i++) {
+        const spread = event.angle + rand(-0.2, 0.2);
+        const speed = rand(150, 260);
         this.addParticle({
-          x: event.x + Math.cos(event.angle) * 16, y: event.y - 8 + Math.sin(event.angle) * 16,
-          vx: Math.cos(spread) * speed, vy: Math.sin(spread) * speed,
-          life: rand(0.18, 0.34), size: rand(3, 6), color: pick(['#ffd97a', '#ff9f45', '#ff6b35', '#ffe8b0']),
-          shape: 'smoke', drag: 1.5,
+          x: ox, y: oy, vx: Math.cos(spread) * speed, vy: Math.sin(spread) * speed - 8,
+          life: rand(0.22, 0.4), size: rand(2.5, 4.5) + level * 0.5,
+          color: pick(['#ff9a3a', '#ff7a2a', '#ffc45a', '#ff5a1f', '#e8401a']), shape: 'fire', drag: 2.2, grow: 1.6,
         });
+      }
+      const ex = ox + Math.cos(event.angle) * reach;
+      const ey = oy + Math.sin(event.angle) * reach;
+      this.addParticle({
+        x: ex + rand(-6, 6), y: ey + rand(-6, 6),
+        vx: Math.cos(event.angle) * rand(20, 50) + rand(-10, 10), vy: rand(-45, -20),
+        life: rand(0.6, 1.1), size: rand(3, 5), color: pick(['rgba(70,60,60,0.55)', 'rgba(40,35,35,0.5)']),
+        shape: 'smoke', grow: 2.2, drag: 1.2,
+      });
+      if (Math.random() < 0.7) {
+        this.addParticle({ x: ex, y: ey, vx: rand(-40, 40), vy: rand(-80, -30), life: rand(0.4, 0.8), size: rand(1.2, 2), color: pick(['#ffd97a', '#ff9f45']), shape: 'ember', gravity: 40, drag: 0.8 });
       }
     } else if (t === 'venom') {
       for (let i = 0; i < 3; i++) {
@@ -1637,8 +1657,13 @@ class Effects {
       }
       this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.12, size: 12, color: '#f2ffd0', shape: 'flash' });
     } else if (t === 'flame') {
-      for (let i = 0; i < 2; i++) {
-        this.addParticle({ x: event.x + rand(-4, 4), y: event.y + rand(-4, 4), vx: rand(-20, 20), vy: rand(-50, -20), life: rand(0.2, 0.45), size: rand(1.5, 2.5), color: '#ffd97a', shape: 'ember' });
+      // Fire splashes up the target, embers pop off, and the ground scorches.
+      for (let i = 0; i < 3; i++) {
+        this.addParticle({ x: event.x + rand(-6, 6), y: event.y + rand(-5, 5), vx: rand(-25, 25), vy: rand(-65, -25), life: rand(0.25, 0.45), size: rand(2, 3.5), color: pick(['#ff9f45', '#ff7a2a', '#ff6b35', '#e8401a']), shape: 'fire', drag: 1.5 });
+      }
+      this.addParticle({ x: event.x + rand(-4, 4), y: event.y + rand(-4, 4), vx: rand(-30, 30), vy: rand(-70, -30), life: rand(0.3, 0.6), size: rand(1.4, 2.4), color: '#ffd97a', shape: 'ember', gravity: 50 });
+      if (Math.random() < 0.2) {
+        this.addGroundParticle({ x: event.x + rand(-4, 4), y: event.y + rand(2, 8), vx: 0, vy: 0, life: rand(2, 4), size: rand(4, 7), color: 'rgba(30,20,15,0.45)', shape: 'scorch' });
       }
     } else if (t === 'mage') {
       for (let i = 0; i < 12; i++) {
@@ -1928,6 +1953,7 @@ function render(ctx, game, effects, ui, time) {
   drawEnemies(ctx, game, time);
   drawProjectiles(ctx, game);
   drawBeams(ctx, game, time);
+  drawFlameJets(ctx, game, time);
   drawBolts(ctx, effects.bolts);
   drawCloudShadows(ctx, scene.clouds, level, time);
   drawBeaconAuras(ctx, game, time);
@@ -3476,7 +3502,7 @@ function drawTowers(ctx, game, ui, time) {
     else if (tower.typeId === 'cannon') drawCannonTower(ctx, spot, tower.angle ?? 0, tower.cooldown / stats.fireInterval, tower.level);
     else if (tower.typeId === 'frost') drawFrostTower(ctx, spot, time, justFired, tower.level);
     else if (tower.typeId === 'tesla') drawTeslaTower(ctx, spot, time, justFired, tower.level);
-    else if (tower.typeId === 'flame') drawFlameTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
+    else if (tower.typeId === 'flame') drawFlameTower(ctx, spot, time, tower.angle ?? 0, tower.cooldown > 0, tower.level);
     else if (tower.typeId === 'laser') drawLaserTower(ctx, spot, time, tower.angle ?? 0, tower.beamTargetId ? game.beamMultiplier(tower) : 0, tower.level);
     else if (tower.typeId === 'mortar') drawMortarTower(ctx, spot, time, tower.angle ?? -Math.PI / 2, tower.cooldown / stats.fireInterval, tower.level);
     else if (tower.typeId === 'sniper') drawSniperTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
@@ -3882,60 +3908,394 @@ function drawTeslaTower(ctx, spot, time, justFired, level) {
   }
 }
 
-function drawFlameTower(ctx, spot, time, angle, justFired, level) {
+// Flamethrower: riveted brass boiler on an iron skid, pressure gauge, valve
+// wheel, fuel hose and a swivel-mounted nozzle that glows while firing.
+const FLAME_NOZZLE_LEN = (level) => 15 + level * 1.5;
+
+function drawFlameTower(ctx, spot, time, angle, firing, level) {
   const x = spot.x;
   const y = spot.y - 8;
-  // Brass fuel tank.
-  ctx.fillStyle = ['#b8863a', '#c4903a', '#d09a3a', '#dca03a'][level];
-  ctx.strokeStyle = '#6e4e1e';
-  ctx.lineWidth = 1.5;
-  roundRect(ctx, x - 11 - level, y - 12 - level, 22 + level * 2, 18 + level, 6);
-  ctx.strokeStyle = 'rgba(110,78,30,0.6)'; // tank bands
-  ctx.lineWidth = 1;
+  const flick = Math.sin(time * 23) * 0.5 + Math.sin(time * 37 + 1) * 0.5;
+
+  // Ground shadow and iron skid.
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
-  ctx.moveTo(x - 10, y - 5);
-  ctx.lineTo(x + 10, y - 5);
-  ctx.moveTo(x - 10, y + 1);
-  ctx.lineTo(x + 10, y + 1);
-  ctx.stroke();
-  // Pressure gauge.
-  ctx.fillStyle = '#eee6c8';
-  ctx.beginPath();
-  ctx.arc(x - 5, y - 6, 2.5, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 10, 16 + level, 5, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#b8403a';
-  ctx.beginPath();
-  ctx.moveTo(x - 5, y - 6);
-  ctx.lineTo(x - 5 + Math.cos(time * 2) * 2, y - 6 + Math.sin(time * 2) * 2);
-  ctx.stroke();
-  // Nozzle aimed at the target.
-  const nx = x + Math.cos(angle) * 14;
-  const ny = y - 2 + Math.sin(angle) * 14;
-  ctx.strokeStyle = '#3b4046';
-  ctx.lineWidth = 5 + level;
+  ctx.fillStyle = '#3a3b40';
+  ctx.strokeStyle = '#1f2024';
+  ctx.lineWidth = 1;
+  roundRect(ctx, x - 14 - level, y + 3, 28 + level * 2, 6, 2);
+  ctx.fillStyle = '#26272b';
+  ctx.fillRect(x - 12 - level, y + 8, 4, 3);
+  ctx.fillRect(x + 8 + level, y + 8, 4, 3);
+
+  // Side fuel tanks from tier 2, with a vertical brass gradient.
+  if (level >= 1) {
+    for (const sx of [x - 19 - level, x + 14 + level]) {
+      const g = ctx.createLinearGradient(sx, 0, sx + 6, 0);
+      g.addColorStop(0, '#6b4616');
+      g.addColorStop(0.4, '#e2b25a');
+      g.addColorStop(1, '#8a5e22');
+      ctx.fillStyle = g;
+      ctx.strokeStyle = '#4a3010';
+      ctx.lineWidth = 1;
+      roundRect(ctx, sx, y - 7, 6, 13, 3);
+      ctx.fillStyle = '#3a3b40';
+      ctx.fillRect(sx + 1.5, y - 9, 3, 2.5); // cap
+    }
+  }
+
+  // Main drum: cylindrical shading, end bands, rivets, specular streak.
+  const w = 24 + level * 2;
+  const h = 17 + level;
+  const left = x - w / 2;
+  const top = y - 11 - level;
+  const brass = ctx.createLinearGradient(0, top, 0, top + h);
+  brass.addColorStop(0, '#7a5520');
+  brass.addColorStop(0.22, '#e4b45a');
+  brass.addColorStop(0.42, '#f7dc92');
+  brass.addColorStop(0.7, '#c98f36');
+  brass.addColorStop(1, '#5e3c12');
+  ctx.fillStyle = brass;
+  ctx.strokeStyle = '#4a3010';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, left, top, w, h, 7);
+  ctx.strokeStyle = 'rgba(70,45,15,0.75)';
+  ctx.lineWidth = 2;
+  for (const bx of [left + 6, left + w - 6]) {
+    ctx.beginPath();
+    ctx.moveTo(bx, top + 1);
+    ctx.lineTo(bx, top + h - 1);
+    ctx.stroke();
+    for (const ry of [top + 4, top + h / 2, top + h - 4]) {
+      ctx.fillStyle = '#4a3010';
+      ctx.beginPath();
+      ctx.arc(bx, ry, 1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffe9b0';
+      ctx.beginPath();
+      ctx.arc(bx - 0.4, ry - 0.4, 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.strokeStyle = 'rgba(255,245,210,0.55)';
+  ctx.lineWidth = 1.2;
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(x, y - 2);
-  ctx.lineTo(nx, ny);
+  ctx.moveTo(left + 9, top + 4);
+  ctx.lineTo(left + w - 9, top + 4);
   ctx.stroke();
-  // Pilot flame at the nozzle, bigger while firing.
-  const f = (justFired ? 7 : 3) + Math.sin(time * 25) * 1.2;
-  ctx.fillStyle = '#ff9f45';
+  // Soot staining toward the nozzle side.
+  const soot = ctx.createLinearGradient(x, 0, x + w / 2, 0);
+  soot.addColorStop(0, 'rgba(0,0,0,0)');
+  soot.addColorStop(1, 'rgba(30,20,10,0.35)');
+  ctx.fillStyle = soot;
+  roundRectFill(ctx, left, top, w, h, 7);
+
+  // Pressure gauge: bezel, dial, red zone, needle, glass highlight.
+  const gx = left + w * 0.32;
+  const gy = top + h * 0.56;
+  ctx.fillStyle = '#2b2b30';
   ctx.beginPath();
-  ctx.arc(nx + Math.cos(angle) * 3, ny + Math.sin(angle) * 3, f, 0, Math.PI * 2);
+  ctx.arc(gx, gy, 4.4, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#ffe08a';
+  ctx.fillStyle = '#f3ecd6';
   ctx.beginPath();
-  ctx.arc(nx + Math.cos(angle) * 3, ny + Math.sin(angle) * 3, f * 0.5, 0, Math.PI * 2);
+  ctx.arc(gx, gy, 3.4, 0, Math.PI * 2);
   ctx.fill();
-  if (level >= 2) {
-    // Twin side tanks on the top tier.
-    ctx.fillStyle = '#9b7030';
-    ctx.strokeStyle = '#6e4e1e';
-    ctx.lineWidth = 1;
-    roundRect(ctx, x - 17, y - 8, 5, 12, 2.5);
-    roundRect(ctx, x + 12, y - 8, 5, 12, 2.5);
+  ctx.strokeStyle = '#d9413a';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(gx, gy, 2.6, -0.4, 0.8);
+  ctx.stroke();
+  const needle = firing ? 0.3 + flick * 0.3 : -2.2 + Math.sin(time * 2) * 0.15;
+  ctx.strokeStyle = '#1e1e22';
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(gx, gy);
+  ctx.lineTo(gx + Math.cos(needle) * 2.9, gy + Math.sin(needle) * 2.9);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.beginPath();
+  ctx.arc(gx - 1.1, gy - 1.3, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Valve wheel on top, spinning while fuel flows.
+  const vx = left + w * 0.72;
+  const vy = top - 3.5;
+  ctx.strokeStyle = '#3b3b40';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(vx, top + 1);
+  ctx.lineTo(vx, vy);
+  ctx.stroke();
+  ctx.strokeStyle = '#9b2626';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(vx, vy, 3.4, 0, Math.PI * 2);
+  ctx.stroke();
+  const spin = time * (firing ? 5 : 0.6);
+  for (let k = 0; k < 3; k++) {
+    const a = spin + (k * Math.PI * 2) / 3;
+    ctx.beginPath();
+    ctx.moveTo(vx, vy);
+    ctx.lineTo(vx + Math.cos(a) * 3.4, vy + Math.sin(a) * 3.4);
+    ctx.stroke();
   }
+
+  // Fuel hose: a short loop from the valve down to the swivel.
+  const sx = x;
+  const sy = y - 4;
+  ctx.strokeStyle = '#3a3330';
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(vx, top + 1);
+  ctx.bezierCurveTo(vx + 7, top - 3 + Math.sin(time * 3) * 0.4, sx + 9, sy - 7, sx + 4, sy - 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(vx, top + 0.5);
+  ctx.bezierCurveTo(vx + 7, top - 3.5 + Math.sin(time * 3) * 0.4, sx + 9, sy - 7.5, sx + 4, sy - 2.5);
+  ctx.stroke();
+  ctx.fillStyle = '#8a8d96';
+  ctx.beginPath();
+  ctx.arc(sx + 4, sy - 2, 1.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Swivel mount.
+  ctx.fillStyle = '#4b4d55';
+  ctx.strokeStyle = '#202126';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy + 1, 7.5 + level * 0.5, 4.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#6f737d';
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, 5.5 + level * 0.5, 3.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Nozzle barrels: twin barrels from tier 3.
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const px = -sin;
+  const py = cos;
+  const len = FLAME_NOZZLE_LEN(level);
+  const barrels = level >= 2 ? [-2.4, 2.4] : [0];
+  for (const off of barrels) {
+    const bx0 = sx + px * off;
+    const by0 = sy + py * off;
+    const tx = bx0 + cos * len;
+    const ty = by0 + sin * len;
+    ctx.strokeStyle = '#2e3136';
+    ctx.lineWidth = 5 + level * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(bx0, by0);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    // Heat bands along the barrel.
+    ctx.strokeStyle = firing ? 'rgba(255,120,40,0.7)' : 'rgba(110,115,125,0.9)';
+    ctx.lineWidth = 1;
+    for (const t of [0.45, 0.65, 0.85]) {
+      const cx = bx0 + cos * len * t;
+      const cy = by0 + sin * len * t;
+      ctx.beginPath();
+      ctx.moveTo(cx + px * 2.6, cy + py * 2.6);
+      ctx.lineTo(cx - px * 2.6, cy - py * 2.6);
+      ctx.stroke();
+    }
+    // Top highlight.
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(bx0 + cos * 3 - px * 1.4, by0 + sin * 3 - py * 1.4);
+    ctx.lineTo(bx0 + cos * (len - 3) - px * 1.4, by0 + sin * (len - 3) - py * 1.4);
+    ctx.stroke();
+    // Bell mouth, glowing when hot.
+    ctx.fillStyle = firing ? '#ff8a3a' : '#4a4e55';
+    ctx.strokeStyle = '#1f2024';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(tx, ty, 3.4 + level * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = firing ? '#fff1c8' : '#1b1c20';
+    ctx.beginPath();
+    ctx.arc(tx, ty, 1.6 + level * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalCompositeOperation = 'lighter';
+    if (firing) {
+      const g = ctx.createRadialGradient(tx, ty, 0, tx, ty, 11 + level);
+      g.addColorStop(0, `rgba(255,170,70,${0.55 + flick * 0.15})`);
+      g.addColorStop(1, 'rgba(255,90,20,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 11 + level, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Pilot light: a small layered tongue licking off the mouth.
+      drawFlameTongue(ctx, tx + cos * 2, ty + sin * 2, angle, 6 + flick * 1.2, 3.6, time, off);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // Tier 4: cooling fins and a glowing burner vent on the drum.
+  if (level >= 3) {
+    ctx.strokeStyle = '#2e3136';
+    ctx.lineWidth = 1.2;
+    for (let k = 0; k < 4; k++) {
+      const fx = left + w * 0.48 + k * 2.6;
+      ctx.beginPath();
+      ctx.moveTo(fx, top - 1);
+      ctx.lineTo(fx, top - 5);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = `rgba(255,120,40,${0.5 + flick * 0.2})`;
+    ctx.beginPath();
+    ctx.ellipse(left + w * 0.52, top + h * 0.78, 4, 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
+// Fill-only rounded rect (no stroke) for overlays like soot.
+function roundRectFill(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// A layered flame tongue pointing along `angle`: red sheath, orange body,
+// yellow core, white heart, each shorter than the last and flickering.
+function drawFlameTongue(ctx, x, y, angle, length, width, time, seed) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  const layers = [
+    [1.0, 1.0, 'rgba(255,70,20,0.55)'],
+    [0.8, 0.8, 'rgba(255,140,40,0.8)'],
+    [0.6, 0.6, 'rgba(255,215,110,0.9)'],
+    [0.35, 0.4, 'rgba(255,250,225,0.95)'],
+  ];
+  for (const [ls, ws, color] of layers) {
+    const L = length * ls * (1 + Math.sin(time * 21 + seed * 3) * 0.15);
+    const W = width * ws;
+    const wob = Math.sin(time * 15 + seed) * W * 0.4;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -W);
+    ctx.quadraticCurveTo(L * 0.6, -W * 0.9 + wob, L, wob * 0.5);
+    ctx.quadraticCurveTo(L * 0.6, W * 0.9 + wob, 0, W);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Continuous fire jet from each flamethrower to its target while it fires:
+// four additive layers from a translucent red sheath to a white-hot core,
+// with turbulence rolling along the stream and a heat bloom at the impact.
+function drawFlameJets(ctx, game, time) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  game.towers.forEach((tower, i) => {
+    if (!tower || tower.typeId !== 'flame' || !(tower.cooldown > 0) || tower.targetX === undefined) return;
+    const spot = game.level.buildSpots[i];
+    const level = tower.level;
+    const angle = tower.angle ?? 0;
+    const len = FLAME_NOZZLE_LEN(level);
+    const ox = spot.x + Math.cos(angle) * len;
+    const oy = spot.y - 12 + Math.sin(angle) * len;
+    const dist = Math.hypot(tower.targetX - ox, tower.targetY - oy);
+    const reach = Math.min(dist + 12, 120);
+    const seed = i * 1.37;
+    const baseW = 10 + level * 2.5;
+    const layers = [
+      [1.0, 1.0, 'rgba(255,45,10,0.22)'],
+      [0.8, 0.96, 'rgba(255,110,25,0.36)'],
+      [0.56, 0.86, 'rgba(255,185,60,0.42)'],
+      [0.24, 0.55, 'rgba(255,240,200,0.5)'],
+    ];
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.rotate(angle);
+    const segs = 8;
+    for (const [ws, ls, color] of layers) {
+      const L = reach * ls;
+      const upper = [];
+      const lower = [];
+      for (let k = 0; k <= segs; k++) {
+        const t = k / segs;
+        const sx = L * t;
+        // The stream widens with distance and ripples as fuel pulses through.
+        const w = (2.5 + baseW * Math.pow(t, 0.7) * (1 + Math.sin(time * 19 - t * 11 + seed) * 0.28)) * ws;
+        const drift = Math.sin(time * 13 - t * 8 + seed) * 3.2 * t + Math.sin(time * 29 + t * 17) * 0.8 * t;
+        upper.push([sx, -w + drift]);
+        lower.push([sx, w + drift]);
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      tracePolyline(ctx, upper, true);
+      tracePolyline(ctx, lower.reverse(), false);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // Hot sparks riding the stream.
+    ctx.fillStyle = 'rgba(255,240,200,0.9)';
+    for (let k = 0; k < 3 + level; k++) {
+      const t = ((time * 2.2 + k * 0.31 + seed) % 1);
+      const sx = reach * t;
+      const sy = Math.sin(time * 13 - t * 8 + seed) * 3 * t + Math.sin(k * 7.3 + time * 9) * baseW * 0.5 * t;
+      ctx.globalAlpha = 1 - t;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 1.1 + level * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // Heat bloom where the stream lands and a warm ground light along it.
+    const ex = ox + Math.cos(angle) * Math.min(dist, reach);
+    const ey = oy + Math.sin(angle) * Math.min(dist, reach);
+    const bloom = ctx.createRadialGradient(ex, ey, 0, ex, ey, 18 + level * 3);
+    bloom.addColorStop(0, `rgba(255,170,80,${0.3 + Math.sin(time * 27 + seed) * 0.08})`);
+    bloom.addColorStop(1, 'rgba(255,100,20,0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath();
+    ctx.arc(ex, ey, 18 + level * 3, 0, Math.PI * 2);
+    ctx.fill();
+    const light = ctx.createRadialGradient(ox, oy, 0, ox, oy, reach);
+    light.addColorStop(0, 'rgba(255,150,60,0.12)');
+    light.addColorStop(1, 'rgba(255,100,20,0)');
+    ctx.fillStyle = light;
+    ctx.beginPath();
+    ctx.arc(ox, oy, reach, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+// Smooth midpoint-curve through a point list, continuing the current path.
+function tracePolyline(ctx, pts, start) {
+  if (start) ctx.moveTo(pts[0][0], pts[0][1]);
+  else ctx.lineTo(pts[0][0], pts[0][1]);
+  for (let k = 1; k < pts.length - 1; k++) {
+    const mx = (pts[k][0] + pts[k + 1][0]) / 2;
+    const my = (pts[k][1] + pts[k + 1][1]) / 2;
+    ctx.quadraticCurveTo(pts[k][0], pts[k][1], mx, my);
+  }
+  const last = pts[pts.length - 1];
+  ctx.lineTo(last[0], last[1]);
 }
 
 function drawLaserTower(ctx, spot, time, angle, multiplier, level) {
@@ -4781,20 +5141,22 @@ function drawWings(ctx, x, y, r, time, id, color) {
 }
 
 function drawFlame(ctx, x, y, r, time, id) {
-  const h = r * (0.9 + Math.sin(time * 12 + id) * 0.25);
-  const lean = Math.sin(time * 7 + id) * r * 0.2;
-  ctx.fillStyle = '#ff9f45';
+  // Three tongues of different heights, additive, with a soft glow beneath.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(x, y - r * 0.6, 0, x, y - r * 0.6, r * 1.6);
+  g.addColorStop(0, 'rgba(255,150,60,0.35)');
+  g.addColorStop(1, 'rgba(255,90,20,0)');
+  ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.moveTo(x - r * 0.4, y - r * 0.8);
-  ctx.quadraticCurveTo(x + lean, y - r * 0.8 - h, x + r * 0.4, y - r * 0.8);
-  ctx.closePath();
+  ctx.arc(x, y - r * 0.6, r * 1.6, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#ffe08a';
-  ctx.beginPath();
-  ctx.moveTo(x - r * 0.2, y - r * 0.8);
-  ctx.quadraticCurveTo(x + lean * 0.6, y - r * 0.8 - h * 0.55, x + r * 0.2, y - r * 0.8);
-  ctx.closePath();
-  ctx.fill();
+  for (let k = -1; k <= 1; k++) {
+    const h = r * (k === 0 ? 1.3 : 0.8) * (0.9 + Math.sin(time * 12 + id + k * 2) * 0.25);
+    const lean = Math.sin(time * 7 + id + k) * r * 0.25;
+    drawFlameTongue(ctx, x + k * r * 0.45, y - r * 0.7, -Math.PI / 2 + lean / r * 0.6, h, r * 0.32, time, id + k);
+  }
+  ctx.restore();
 }
 
 function drawStinger(ctx, x, y, r, facing, time) {
@@ -4938,6 +5300,19 @@ function drawParticleList(ctx, particles, glow = false) {
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * (1.4 - frac * 0.4), 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      case 'fire': {
+        const r = p.size * (0.7 + (1 - frac) * (p.grow || 1) * 0.6);
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        g.addColorStop(0, frac > 0.75 ? '#fff0c8' : p.color);
+        g.addColorStop(0.4, p.color);
+        g.addColorStop(1, 'rgba(255,60,10,0)');
+        ctx.globalAlpha = Math.min(0.85, frac * 1.1);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
         ctx.fill();
         break;
       }

@@ -269,6 +269,8 @@ export class Game {
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
+      tower.targetX = pos.x; // where the shot went, for continuous effects like the flame jet
+      tower.targetY = pos.y;
       tower.cooldown = stats.fireInterval;
       this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level, targetX: pos.x, targetY: pos.y });
 
