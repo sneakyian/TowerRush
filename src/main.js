@@ -12,22 +12,33 @@ const PROGRESS_KEY = 'towerrush-progress';
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-// Render at device resolution so lines and glows stay crisp on HiDPI screens.
+// The world is 800x480 logical units, but the canvas fills the stage (up to
+// 1280 CSS px) and its backing store is sized at display size x device pixel
+// ratio. Everything is vector-drawn through one scale transform, so a bigger
+// or sharper screen simply gets more resolution.
+const MAX_BACKING_WIDTH = 2800; // keeps the backing store sane on huge HiDPI screens
+const stageEl = document.getElementById('stage');
+
 function fitCanvas() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const { width, height } = game.level;
-  canvas.width = Math.round(width * dpr);
-  canvas.height = Math.round(height * dpr);
-  canvas.style.width = `${width}px`;
+  const cssWidth = Math.max(320, stageEl.clientWidth || width);
+  const cssHeight = (cssWidth * height) / width;
+  const scale = Math.min((cssWidth / width) * dpr, MAX_BACKING_WIDTH / width);
+  canvas.style.width = '100%';
   canvas.style.height = 'auto';
   canvas.style.aspectRatio = `${width} / ${height}`;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  canvas.width = Math.round(width * scale);
+  canvas.height = Math.round(height * scale);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  return { cssWidth, cssHeight };
 }
 
 let levelIndex = 0;
 let game = new Game(LEVELS[0]);
 fitCanvas();
 window.addEventListener('resize', fitCanvas);
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => fitCanvas()).observe(stageEl);
 const effects = new Effects();
 const ui = { selectedSpot: -1 };
 

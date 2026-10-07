@@ -64,7 +64,7 @@ export const LEVELS = [
     water: [{ x: 600, y: 430, rx: 95, ry: 38 }, { x: 80, y: 400, rx: 55, ry: 30 }],
     theme: {
       groundTop: '#eef3f7', groundBottom: '#cfdce6',
-      mottleLight: 'rgba(255,255,255,0.35)', mottleDark: 'rgba(120,150,175,0.12)',
+      mottleLight: 'rgba(255,255,255,0.4)', mottleDark: 'rgba(120,150,175,0.14)',
       pathEdge: '#8fa3b2', pathFill: '#d4e0e8', pathLine: 'rgba(120,145,160,0.45)',
       waterShallow: '#a9dcf2', waterDeep: '#6fb4d9', waterGlow: 'rgba(255,255,255,0.6)',
       stone: '#8c95a0', stoneDark: '#6a737e', cloudAlpha: 0.1,
@@ -192,7 +192,7 @@ export const LEVELS = [
     ],
     theme: {
       groundTop: '#4e3e3c', groundBottom: '#2e2524',
-      mottleLight: 'rgba(255,150,80,0.07)', mottleDark: 'rgba(0,0,0,0.2)',
+      mottleLight: 'rgba(255,150,80,0.09)', mottleDark: 'rgba(0,0,0,0.28)',
       pathEdge: '#2a211f', pathFill: '#6f5a52', pathLine: 'rgba(40,30,28,0.6)',
       waterShallow: '#ff8c33', waterDeep: '#c2401a', waterGlow: 'rgba(255,230,150,0.55)',
       stone: '#5d5a66', stoneDark: '#3f3d47', cloudAlpha: 0.2,
