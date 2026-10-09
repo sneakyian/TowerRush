@@ -1,0 +1,12 @@
+{
+  "name": "towerrush",
+  "version": "0.1.0",
+  "description": "A simple Kingdom Rush-inspired tower defense game",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "build": "node tools/build-standalone.js",
+    "start": "npx -y http-server -p 8080 -c-1 ."
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tower Rush</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: radial-gradient(ellipse at top, #2a3142 0%, #161a24 60%, #0f1118 100%);
+      min-height: 100vh;
+      color: #e6eaf2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+      background: linear-gradient(90deg, #8fd3ff, #ff4fd8);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    #hud {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-variant-numeric: tabular-nums;
+    }
+    #hud > span {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(6px);
+    }
+    #stage {
+      position: relative;
+      width: min(100%, 1280px);
+      border-radius: 10px;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 20px 60px rgba(0, 0, 0, 0.55), 0 0 40px rgba(143, 211, 255, 0.08);
+    }
+    #game {
+      display: block;
+      border-radius: 10px;
+      max-width: 100%;
+      touch-action: manipulation;
+    }
+    #level-select {
+      position: absolute;
+      inset: 0;
+      background: rgba(12, 14, 22, 0.86);
+      backdrop-filter: blur(8px);
+      border-radius: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 16px;
+      overflow: auto;
+    }
+    #level-select h2 { margin: 0 0 6px; font-size: 1.3rem; letter-spacing: 0.04em; }
+    #level-list { display: flex; flex-direction: column; gap: 8px; width: min(440px, 100%); }
+    .level-btn {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .level-btn:hover:not(:disabled) { background: rgba(143, 211, 255, 0.18); border-color: rgba(143, 211, 255, 0.5); }
+    .level-btn small { opacity: 0.75; font-weight: normal; }
+    .level-btn:disabled { opacity: 0.45; }
+    #controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+    #tower-menu { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    button {
+      padding: 8px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+    }
+    button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+    button:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button[data-type] {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      min-width: 92px;
+      padding: 8px 10px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--tower) 85%, white 15%), var(--tower));
+      color: var(--tower-fg, #fff);
+      border-color: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 0 14px color-mix(in srgb, var(--tower) 55%, transparent);
+    }
+    button[data-type] .tower-name { font-weight: 600; font-size: 0.85rem; }
+    button[data-type] .tower-cost { font-size: 0.8rem; opacity: 0.85; }
+    #start-wave { background: linear-gradient(180deg, #6fa0d8, #4a6fa5); font-weight: 600; letter-spacing: 0.03em; }
+    #sell-tower { background: linear-gradient(180deg, #d06a72, #a8524c); }
+    #speed.active { background: var(--good); color: #1b1f2a; font-weight: 600; }
+    #sound.muted { opacity: 0.6; }
+    #upgrade-tower { background: linear-gradient(180deg, #b7d99f, #8fb273); color: #1b1f2a; font-weight: 600; }
+    #tower-info { font-size: 0.9rem; opacity: 0.85; min-height: 1.2em; }
+    #status { min-height: 1.4em; font-style: italic; opacity: 0.8; }
+    #hero-list { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+    .hero-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 118px; padding: 8px 6px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.14); color: #eceff4; text-align: center; }
+    .hero-btn:hover { background: rgba(143,211,255,0.2); }
+    .hero-btn.selected { border-color: var(--hero, #ffd166); box-shadow: 0 0 14px var(--hero, #ffd166); background: rgba(255,255,255,0.14); }
+    .hero-btn .hero-icon { font-size: 1.6rem; }
+    .hero-btn strong { font-size: 0.85rem; }
+    .hero-btn small { opacity: 0.75; font-size: 0.7rem; line-height: 1.2; }
+    #hero-panel { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; font-size: 0.95rem; }
+    #hero-portrait { font-size: 1.4rem; }
+    #hero-hp { display: inline-block; width: 120px; height: 10px; border-radius: 5px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.2); overflow: hidden; vertical-align: middle; }
+    #hero-hp-fill { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #8fb273, #5f8f4a); transition: width 0.15s; }
+    #hero-ability { background: linear-gradient(180deg, #ffd98a, #e2b84a); color: #1b1f2a; font-weight: 600; min-width: 150px; }
+    #hero-ability:disabled { background: var(--border); color: var(--muted); }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Tower Rush</h1>
+  <div id="hud">
+    <span id="level-name"></span>
+    <span>💰 Gold: <strong id="gold">0</strong></span>
+    <span>❤️ Lives: <strong id="lives">0</strong></span>
+    <span>🌊 Wave: <strong id="wave">0 / 0</strong></span>
+  </div>
+  <div id="stage">
+    <canvas id="game" width="800" height="480"></canvas>
+    <div id="level-select">
+      <h2>Choose your hero</h2>
+      <div id="hero-list"></div>
+      <h2>Choose a level</h2>
+      <div id="level-list"></div>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="start-wave">Start Wave</button>
+    <button id="speed" title="Fast-forward (F or 1/2/3)">Speed 1×</button>
+    <button id="sound" title="Sound on/off (M)">🔊 Sound</button>
+    <span id="tower-menu" hidden>
+      <button id="upgrade-tower">Upgrade</button>
+      <button id="sell-tower">Sell</button>
+    </span>
+    <button id="next-level" hidden>Next Level</button>
+    <button id="restart" hidden>Play Again</button>
+    <button id="choose-level">Levels</button>
+  </div>
+  <div id="hero-panel" hidden>
+    <span id="hero-portrait"></span>
+    <span id="hero-name"></span>
+    <span id="hero-hp"><span id="hero-hp-fill"></span></span>
+    <span id="hero-level"></span>
+    <button id="hero-ability">Ability</button>
+  </div>
+  <div id="tower-info"></div>
+  <div id="status"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
