@@ -6,6 +6,7 @@ import { LEVELS } from './levels.js';
 import { Game, PHASE, describeTraits } from './game.js';
 import { Effects } from './effects.js';
 import { render } from './render.js';
+import { SoundSystem } from './audio.js';
 
 const PROGRESS_KEY = 'towerrush-progress';
 const HERO_KEY = 'towerrush-hero';
@@ -42,6 +43,13 @@ fitCanvas();
 window.addEventListener('resize', fitCanvas);
 if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => fitCanvas()).observe(stageEl);
 const effects = new Effects();
+const sound = new SoundSystem();
+const SOUND_KEY = 'towerrush-sound';
+try { if (localStorage.getItem(SOUND_KEY) === 'off') sound.muted = true; } catch { /* default on */ }
+// Browsers only allow audio after a user gesture: the first click or key unlocks it.
+const unlockSound = () => { sound.unlock(); sound.setTheme(LEVELS[levelIndex].id); };
+window.addEventListener('pointerdown', unlockSound, { capture: true });
+window.addEventListener('keydown', unlockSound, { capture: true });
 const ui = { selectedSpot: -1, heroSelected: false, marker: null };
 
 // --- Saved progress (best effort; storage may be unavailable) -----------
@@ -97,9 +105,23 @@ function setSpeed(value) {
   speedBtn.classList.toggle('active', speed > 1);
 }
 speedBtn.addEventListener('click', () => setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]));
+const soundBtn = document.getElementById('sound');
+function refreshSoundButton() {
+  soundBtn.textContent = sound.muted ? '🔇 Muted' : '🔊 Sound';
+  soundBtn.classList.toggle('muted', sound.muted);
+}
+soundBtn.addEventListener('click', () => {
+  sound.toggleMute();
+  try { localStorage.setItem(SOUND_KEY, sound.muted ? 'off' : 'on'); } catch { /* not remembered */ }
+  refreshSoundButton();
+});
+refreshSoundButton();
+// Every button gives a soft click.
+document.addEventListener('click', (e) => { if (e.target.closest('button') && e.target.id !== 'sound') sound.cue('click'); });
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === 'f' || e.key === 'F') { speedBtn.click(); e.preventDefault(); }
+  else if (e.key === 'm' || e.key === 'M') soundBtn.click();
   else if (e.key === '1' || e.key === '2' || e.key === '3') setSpeed(Number(e.key));
 });
 const nextLevelBtn = document.getElementById('next-level');
@@ -212,6 +234,7 @@ function loadLevel(index) {
   levelIndex = Math.min(Math.max(index, 0), LEVELS.length - 1);
   game = new Game(LEVELS[levelIndex]);
   game.setHero(heroChoice);
+  sound.setTheme(LEVELS[levelIndex].id);
   fitCanvas();
   effects.clear();
   ui.selectedSpot = -1;
@@ -352,10 +375,13 @@ function frame(now) {
   // projectiles and status effects behave identically at every speed.
   for (let step = 0; step < speed; step++) {
     game.update(dt);
-    effects.process(game.drainEvents());
+    const events = game.drainEvents();
+    effects.process(events);
+    sound.process(events);
     effects.ambient(game, dt);
     effects.update(dt);
   }
+  sound.update(game, dt);
   if (game.phase !== phaseBefore || game.gold !== goldBefore || game.lives !== livesBefore) {
     updateHud();
   }

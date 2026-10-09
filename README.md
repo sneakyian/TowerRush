@@ -29,6 +29,16 @@ from the sources with `npm run build`.)
   castle costs 1 life, heavy brutes (orcs, yetis, trolls, golems) cost 2,
   and the **boss** on the final wave costs 5.
 
+### Sound
+
+Everything you hear is synthesized live with the Web Audio API, so there
+are no audio files: each tower has its own shot and impact sounds (the
+flamethrower roars while it fires, the laser hums higher as it ramps),
+heroes, bosses and the castle have their own cues, and every level has a
+generative soundtrack that shifts from calm build music to wave music
+with drums and a darker, faster boss mode. **M** or the Sound button
+mutes; browsers only start audio after your first click.
+
 ### Heroes
 
 Pick a hero on the level screen. Click the hero, then click the map to send
@@ -117,6 +127,7 @@ src/path.js      Polyline path addressed by distance
 src/game.js      Core simulation incl. heroes (no DOM — runs in Node for tests)
 src/effects.js   Particles, floating text, banners (no DOM)
 src/render.js    Canvas drawing: terrain, animated water/trees/clouds, sprites
+src/audio.js     Procedural sound effects and generative music (Web Audio)
 src/main.js      Browser wiring: input, HUD, level flow, saved progress
 test/            node:test suites, zero deps
 test/strategy.js Headless AI player used for balance tests
