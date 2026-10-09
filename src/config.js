@@ -26,6 +26,7 @@ export const TOWER_TYPES = {
   },
   mage: {
     id: 'mage',
+    element: 'arcane',
     name: 'Mage Tower',
     desc: 'Slow magic bolts that ignore armor.',
     damageType: 'magic',
@@ -91,6 +92,7 @@ export const TOWER_TYPES = {
   // --- Radiant Defense set: towers defined by their mechanic -------------
   frost: {
     id: 'frost',
+    element: 'ice',
     name: 'Frost Spire',
     desc: 'Ice shards that chill enemies, slowing them down.',
     damageType: 'magic',
@@ -107,6 +109,7 @@ export const TOWER_TYPES = {
   },
   tesla: {
     id: 'tesla',
+    element: 'storm',
     name: 'Tesla Coil',
     desc: 'Lightning that arcs from enemy to enemy.',
     damageType: 'magic',
@@ -123,6 +126,7 @@ export const TOWER_TYPES = {
   },
   flame: {
     id: 'flame',
+    element: 'fire',
     name: 'Flamethrower',
     desc: 'Short-range fire that leaves enemies burning.',
     damageType: 'physical',
@@ -138,6 +142,7 @@ export const TOWER_TYPES = {
   },
   venom: {
     id: 'venom',
+    element: 'poison',
     name: 'Venom Spitter',
     desc: 'Poison that stacks with every hit; keep spitting and heavies melt.',
     damageType: 'magic',
@@ -155,6 +160,7 @@ export const TOWER_TYPES = {
   },
   laser: {
     id: 'laser',
+    element: 'arcane',
     name: 'Laser Lance',
     desc: 'A steady beam that burns hotter the longer it holds a target.',
     damageType: 'magic',
@@ -191,6 +197,15 @@ export const MAX_TOWER_LEVEL = 4;
 
 // `lives` is what an enemy costs if it reaches the castle (default 1):
 // heavy brutes cost 2, bosses cost 5.
+// Traits:
+//   regen     hp per second, stopped while burning or poisoned
+//   shield    energy shield hp; absorbs hits (magic x1.5, physical x0.5),
+//             blocks every status while up, recharges after 3s untouched
+//   element   fire | ice | poison | storm, shown on the sprite
+//   immune    statuses that never land: 'burn' | 'slow' | 'poison'
+//   weakTo    tower element that deals 1.5x: fire | ice | poison | storm | arcane
+//   summons   boss calls { count } of { type } when its hp drops to { at }
+//   enrage    boss speeds up (and hardens) below 30% hp
 // `look` drives the sprite composer in render.js:
 //   body: 'round' | 'long' | 'big' | 'wisp'
 //   features: any of ears, club, tooth, wolf, helmet, pads, tusks, shell,
@@ -208,14 +223,16 @@ export const ENEMY_TYPES = {
     look: { body: 'long', features: ['wolf'] },
   },
   orc: {
-    id: 'orc', name: 'Orc', hp: 110, speed: 40, bounty: 18, radius: 12, lives: 2,
+    id: 'orc', name: 'Orc', hp: 110, speed: 40, bounty: 22, radius: 12, lives: 2,
     armor: 0.3, magicResist: 0, color: '#3e7d3e',
     look: { body: 'round', features: ['helmet', 'pads', 'tusks'] },
   },
   orcWarlord: {
-    id: 'orcWarlord', name: 'Orc Warlord', hp: 380, speed: 32, bounty: 150, radius: 19, lives: 5,
+    id: 'orcWarlord', name: 'Orc Warlord', hp: 650, speed: 32, bounty: 150, radius: 19, lives: 5,
     armor: 0.35, magicResist: 0.1, color: '#2f6b2f', boss: true,
     look: { body: 'big', features: ['helmet', 'pads', 'tusks', 'crown'] },
+    regen: 4, enrage: true,
+    summons: { at: 0.5, type: 'orc', count: 4 },
   },
 
   // --- Level 2: Frostpeak ---
@@ -225,24 +242,29 @@ export const ENEMY_TYPES = {
     look: { body: 'long', features: ['wolf'] },
   },
   iceSprite: {
-    id: 'iceSprite', name: 'Ice Sprite', hp: 45, speed: 85, bounty: 10, radius: 8,
+    id: 'iceSprite', name: 'Ice Sprite', hp: 45, speed: 85, bounty: 14, radius: 8,
     armor: 0, magicResist: 0.7, color: '#8fd3ff',
     look: { body: 'wisp', features: ['glow', 'wings'] },
+    shield: 15, element: 'ice', immune: ['slow'], weakTo: 'fire',
   },
   yeti: {
-    id: 'yeti', name: 'Yeti', hp: 200, speed: 42, bounty: 24, radius: 13, lives: 2,
+    id: 'yeti', name: 'Yeti', hp: 200, speed: 42, bounty: 28, radius: 13, lives: 2,
     armor: 0.25, magicResist: 0, color: '#d8dde3',
     look: { body: 'round', features: ['horns', 'tooth'] },
+    element: 'ice', immune: ['slow'], weakTo: 'fire',
   },
   frostTroll: {
-    id: 'frostTroll', name: 'Frost Troll', hp: 380, speed: 34, bounty: 40, radius: 14, lives: 2,
+    id: 'frostTroll', name: 'Frost Troll', hp: 380, speed: 34, bounty: 52, radius: 14, lives: 2,
     armor: 0.45, magicResist: 0, color: '#6f9fbf',
     look: { body: 'round', features: ['pads', 'tusks', 'club'] },
+    regen: 5, element: 'ice', immune: ['slow'], weakTo: 'fire',
   },
   frostGiant: {
-    id: 'frostGiant', name: 'Frost Giant', hp: 650, speed: 28, bounty: 300, radius: 21, lives: 5,
+    id: 'frostGiant', name: 'Frost Giant', hp: 2500, speed: 28, bounty: 300, radius: 21, lives: 5,
     armor: 0.4, magicResist: 0.25, color: '#5d8fb3', boss: true,
     look: { body: 'big', features: ['horns', 'pads', 'club', 'crown', 'scarf'] },
+    regen: 10, element: 'ice', immune: ['slow'], weakTo: 'fire', enrage: true,
+    summons: { at: 0.5, type: 'snowWolf', count: 6 },
   },
 
   // --- Level 3: Sunscorch Desert ---
@@ -257,72 +279,88 @@ export const ENEMY_TYPES = {
     look: { body: 'round', features: ['hat', 'scarf'] },
   },
   duneWasp: {
-    id: 'duneWasp', name: 'Dune Wasp', hp: 45, speed: 130, bounty: 10, radius: 7,
+    id: 'duneWasp', name: 'Dune Wasp', hp: 45, speed: 130, bounty: 13, radius: 7,
     armor: 0, magicResist: 0.4, color: '#e8c33a',
     look: { body: 'wisp', features: ['wings', 'stinger'] },
+    shield: 15,
   },
   sandGolem: {
-    id: 'sandGolem', name: 'Sand Golem', hp: 400, speed: 30, bounty: 50, radius: 15, lives: 2,
+    id: 'sandGolem', name: 'Sand Golem', hp: 400, speed: 30, bounty: 64, radius: 15, lives: 2,
     armor: 0.6, magicResist: 0, color: '#d9b36c',
     look: { body: 'round', features: ['shell', 'spikes'] },
+    regen: 4, weakTo: 'storm',
   },
   sandWyrm: {
-    id: 'sandWyrm', name: 'Sand Wyrm', hp: 1000, speed: 34, bounty: 450, radius: 22, lives: 5,
+    id: 'sandWyrm', name: 'Sand Wyrm', hp: 2200, speed: 34, bounty: 450, radius: 22, lives: 5,
     armor: 0.5, magicResist: 0.2, color: '#c9953f', boss: true,
     look: { body: 'big', features: ['shell', 'spikes', 'tusks', 'crown'] },
+    regen: 12, weakTo: 'storm', enrage: true,
+    summons: { at: 0.5, type: 'scorpion', count: 8 },
   },
 
   // --- Level 4: Murkwater Swamp ---
   bogFrog: {
-    id: 'bogFrog', name: 'Bog Frog', hp: 60, speed: 100, bounty: 10, radius: 9,
+    id: 'bogFrog', name: 'Bog Frog', hp: 60, speed: 100, bounty: 12, radius: 9,
     armor: 0, magicResist: 0.2, color: '#5fae3a',
     look: { body: 'round', features: ['frog'] },
+    element: 'poison', immune: ['poison'],
   },
   willOWisp: {
-    id: 'willOWisp', name: 'Will-o-Wisp', hp: 45, speed: 115, bounty: 12, radius: 7,
+    id: 'willOWisp', name: 'Will-o-Wisp', hp: 45, speed: 115, bounty: 16, radius: 7,
     armor: 0, magicResist: 0.9, color: '#a8ffc8',
     look: { body: 'wisp', features: ['glow', 'flame'] },
+    shield: 15, element: 'storm', weakTo: 'poison',
   },
   swampWitch: {
-    id: 'swampWitch', name: 'Swamp Witch', hp: 130, speed: 55, bounty: 26, radius: 10,
+    id: 'swampWitch', name: 'Swamp Witch', hp: 130, speed: 55, bounty: 34, radius: 10,
     armor: 0.1, magicResist: 0.7, color: '#7a5c9e',
     look: { body: 'round', features: ['hat', 'glow'] },
+    shield: 30, element: 'poison', immune: ['poison'], weakTo: 'fire',
   },
   bogTroll: {
-    id: 'bogTroll', name: 'Bog Troll', hp: 540, speed: 32, bounty: 60, radius: 15, lives: 2,
+    id: 'bogTroll', name: 'Bog Troll', hp: 540, speed: 32, bounty: 78, radius: 15, lives: 2,
     armor: 0.4, magicResist: 0.2, color: '#4f6b3a',
     look: { body: 'round', features: ['tusks', 'club', 'pads'] },
+    regen: 8, weakTo: 'fire',
   },
   hydra: {
-    id: 'hydra', name: 'Hydra', hp: 2000, speed: 30, bounty: 700, radius: 23, lives: 5,
+    id: 'hydra', name: 'Hydra', hp: 4200, speed: 30, bounty: 700, radius: 23, lives: 5,
     armor: 0.35, magicResist: 0.4, color: '#3f8a5a', boss: true,
     look: { body: 'big', features: ['horns', 'spikes', 'tusks', 'crown', 'glow'] },
+    regen: 35, element: 'poison', immune: ['poison'], weakTo: 'fire',
+    summons: { at: 0.5, type: 'bogFrog', count: 10 },
   },
 
   // --- Level 5: Ember Caldera ---
   fireImp: {
-    id: 'fireImp', name: 'Fire Imp', hp: 70, speed: 115, bounty: 14, radius: 8,
+    id: 'fireImp', name: 'Fire Imp', hp: 70, speed: 115, bounty: 17, radius: 8,
     armor: 0, magicResist: 0.6, color: '#e8552f',
     look: { body: 'round', features: ['horns', 'flame', 'tooth'] },
+    element: 'fire', immune: ['burn'], weakTo: 'ice',
   },
   lavaHound: {
-    id: 'lavaHound', name: 'Lava Hound', hp: 150, speed: 75, bounty: 24, radius: 10,
+    id: 'lavaHound', name: 'Lava Hound', hp: 150, speed: 75, bounty: 30, radius: 10,
     armor: 0.35, magicResist: 0.3, color: '#8a2f1f',
     look: { body: 'long', features: ['wolf', 'flame'] },
+    element: 'fire', immune: ['burn'], weakTo: 'ice',
   },
   ashWraith: {
-    id: 'ashWraith', name: 'Ash Wraith', hp: 150, speed: 75, bounty: 30, radius: 9,
+    id: 'ashWraith', name: 'Ash Wraith', hp: 150, speed: 75, bounty: 40, radius: 9,
     armor: 0, magicResist: 0.85, color: '#6c6c7a',
     look: { body: 'wisp', features: ['glow', 'hat'] },
+    shield: 45, element: 'storm', weakTo: 'poison',
   },
   obsidianGolem: {
-    id: 'obsidianGolem', name: 'Obsidian Golem', hp: 720, speed: 28, bounty: 90, radius: 16, lives: 2,
+    id: 'obsidianGolem', name: 'Obsidian Golem', hp: 720, speed: 28, bounty: 115, radius: 16, lives: 2,
     armor: 0.7, magicResist: 0.2, color: '#2c2c34',
     look: { body: 'round', features: ['shell', 'spikes', 'glow'] },
+    regen: 5, weakTo: 'storm',
   },
   dragon: {
-    id: 'dragon', name: 'Ember Dragon', hp: 2400, speed: 30, bounty: 1200, radius: 24, lives: 5,
+    id: 'dragon', name: 'Ember Dragon', hp: 8000, speed: 30, bounty: 1200, radius: 24, lives: 5,
     armor: 0.45, magicResist: 0.45, color: '#b8321f', boss: true,
     look: { body: 'big', features: ['wings', 'horns', 'spikes', 'flame', 'crown'] },
+    shield: 900, element: 'fire', immune: ['burn'], weakTo: 'ice', regen: 20, enrage: true,
+    summons: { at: 0.5, type: 'fireImp', count: 10 },
   },
 };

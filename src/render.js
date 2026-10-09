@@ -1,3 +1,4 @@
+import { describeTraits } from './game.js';
 // Canvas rendering. Pure drawing — reads game/effects state, never mutates it.
 //
 // Layers, back to front:
@@ -4072,6 +4073,9 @@ function drawEnemies(ctx, game, time) {
       ctx.fill();
     }
 
+    // Trait visuals: elemental aura, regeneration pulse, energy shield, rage.
+    drawEnemyTraits(ctx, enemy, x, y, pos, r, time);
+
     // White hit-flash overlay while enemy.flash runs down.
     if (enemy.flash > 0) {
       ctx.globalAlpha = (enemy.flash / 0.12) * 0.65;
@@ -4933,6 +4937,113 @@ function drawTexts(ctx, effects) {
   ctx.globalAlpha = 1;
 }
 
+const ELEMENT_COLORS = {
+  fire: [255, 120, 40],
+  ice: [143, 211, 255],
+  poison: [143, 211, 58],
+  storm: [126, 200, 255],
+  arcane: [185, 167, 255],
+};
+
+function drawEnemyTraits(ctx, enemy, x, y, pos, r, time) {
+  // Elemental aura: a tinted ring at the feet with two orbiting motes.
+  if (enemy.element && ELEMENT_COLORS[enemy.element]) {
+    const [cr, cg, cb] = ELEMENT_COLORS[enemy.element];
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(${cr},${cg},${cb},${0.45 + Math.sin(time * 4 + enemy.id) * 0.15})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(pos.x, pos.y + r * 0.55, r * 1.15, r * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(${cr},${cg},${cb},0.9)`;
+    for (let m = 0; m < 2; m++) {
+      const a = time * 3 + enemy.id + m * Math.PI;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a) * r * 1.3, y + Math.sin(a) * r * 0.5, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // Regeneration: green pulse while knitting back together.
+  if (enemy.regen > 0 && enemy.hp < enemy.maxHp && !enemy.burn && !enemy.poison) {
+    const pulse = (time * 1.2 + enemy.id * 0.3) % 1;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(120,255,140,${0.6 * (1 - pulse)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r * (0.6 + pulse * 0.7), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // Energy shield: faceted bubble that cracks as it drains, flickers while recharging.
+  if (enemy.shield) {
+    const frac = enemy.shield.hp / enemy.shield.max;
+    const sr = r * 1.4;
+    if (frac > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, y, sr * 0.6, x, y, sr);
+      g.addColorStop(0, `rgba(126,200,255,${0.05 * frac})`);
+      g.addColorStop(1, `rgba(126,200,255,${0.35 * frac})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, sr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(200,240,255,${0.35 + frac * 0.4})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const a = time * 0.8 + (k / 6) * Math.PI * 2;
+        ctx.lineTo(x + Math.cos(a) * sr, y + Math.sin(a) * sr);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(x - sr * 0.4, y - sr * 0.45, sr * 0.25, sr * 0.12, -0.6, 0, Math.PI * 2);
+      ctx.fill();
+      if (frac < 0.5) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.8 - frac})`;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(x + sr * 0.2, y - sr * 0.9);
+        ctx.lineTo(x + sr * 0.45, y - sr * 0.4);
+        ctx.lineTo(x + sr * 0.25, y - sr * 0.1);
+        ctx.moveTo(x - sr * 0.6, y + sr * 0.3);
+        ctx.lineTo(x - sr * 0.3, y + sr * 0.5);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (enemy.shield.sinceHit >= 3) {
+      // Down but about to come back: a faint flicker.
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(126,200,255,${0.2 + Math.sin(time * 25) * 0.15})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.arc(x, y, sr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+  // Enraged: pulsing red aura with jagged rays.
+  if (enemy.enraged) {
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(ctx, x, y, r * 1.8, `rgba(255,60,40,${0.3 + Math.sin(time * 12) * 0.12})`);
+    ctx.strokeStyle = 'rgba(255,90,60,0.8)';
+    ctx.lineWidth = 1.2;
+    for (let k = 0; k < 6; k++) {
+      const a = time * 2 + (k / 6) * Math.PI * 2;
+      const len = r * (1.5 + Math.sin(time * 15 + k) * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * r * 1.1, y + Math.sin(a) * r * 1.1);
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
 function drawBossBar(ctx, game) {
   const boss = game.boss;
   if (!boss) return;
@@ -4945,15 +5056,35 @@ function drawBossBar(ctx, game) {
   ctx.fillRect(x - 2, y - 2, w + 4, 16);
   ctx.fillStyle = '#4a1010';
   ctx.fillRect(x, y, w, 12);
-  ctx.fillStyle = frac > 0.5 ? '#d64545' : '#ff7a45';
+  ctx.fillStyle = boss.enraged ? '#ff3b2f' : frac > 0.5 ? '#d64545' : '#ff7a45';
   ctx.fillRect(x, y, w * frac, 12);
+  // Phase markers for summons and rage thresholds.
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  if (type.summons) ctx.fillRect(x + w * type.summons.at - 0.5, y, 1, 12);
+  if (type.enrage) ctx.fillRect(x + w * 0.3 - 0.5, y, 1, 12);
+  if (boss.shield) {
+    const sf = boss.shield.hp / boss.shield.max;
+    ctx.fillStyle = 'rgba(30,60,90,0.9)';
+    ctx.fillRect(x, y - 6, w, 4);
+    ctx.fillStyle = '#7ec8ff';
+    ctx.fillRect(x, y - 6, w * sf, 4);
+  }
   ctx.font = 'bold 12px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#fff';
   ctx.strokeStyle = 'rgba(0,0,0,0.8)';
   ctx.lineWidth = 3;
-  ctx.strokeText(type.name, game.level.width / 2, y + 10);
-  ctx.fillText(type.name, game.level.width / 2, y + 10);
+  const title = boss.enraged ? `${type.name} — ENRAGED` : type.name;
+  ctx.strokeText(title, game.level.width / 2, y + 10);
+  ctx.fillText(title, game.level.width / 2, y + 10);
+  const traits = describeTraits(type).join('  ·  ');
+  if (traits) {
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = '#ffd98a';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(traits, game.level.width / 2, y + 26);
+    ctx.fillText(traits, game.level.width / 2, y + 26);
+  }
 }
 
 function drawBanner(ctx, effects, level) {

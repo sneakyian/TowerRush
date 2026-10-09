@@ -3,7 +3,7 @@
 
 import { TOWER_TYPES, MAX_TOWER_LEVEL } from './config.js';
 import { LEVELS } from './levels.js';
-import { Game, PHASE } from './game.js';
+import { Game, PHASE, describeTraits } from './game.js';
 import { Effects } from './effects.js';
 import { render } from './render.js';
 
@@ -228,7 +228,12 @@ function updateHud() {
     statusEl.textContent = 'Defeat! The enemies broke through.';
   } else if (game.phase === PHASE.WAVE) {
     const boss = game.boss;
-    statusEl.textContent = boss ? `${game.enemyTypes[boss.typeId].name} approaches!` : `Wave ${game.waveIndex + 1} incoming...`;
+    if (boss) {
+      const traits = describeTraits(game.enemyTypes[boss.typeId]);
+      statusEl.textContent = `${game.enemyTypes[boss.typeId].name} approaches!${traits.length ? ` (${traits.join(', ')})` : ''}`;
+    } else {
+      statusEl.textContent = `Wave ${game.waveIndex + 1} incoming...`;
+    }
   } else if (spotSelected && !tower) {
     statusEl.textContent = 'Choose a tower to build.';
   } else if (tower) {

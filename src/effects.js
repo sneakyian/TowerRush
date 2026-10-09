@@ -63,6 +63,11 @@ export class Effects {
         case 'enemy-died': event.boss ? this.spawnBossDeath(event) : this.spawnDeath(event); break;
         case 'enemy-spawned': this.spawnEmerge(event); break;
         case 'boss-spawned': this.spawnBossArrival(event); break;
+        case 'boss-summons': this.spawnSummons(event); break;
+        case 'boss-enraged': this.spawnEnrage(event); break;
+        case 'shatter': this.spawnShatter(event); break;
+        case 'shield-broken': this.spawnShieldBreak(event); break;
+        case 'shield-restored': this.spawnShieldRestore(event); break;
         case 'enemy-leaked': this.spawnLeak(event); break;
         case 'tower-built': this.spawnConstruction(event); break;
         case 'tower-sold': this.spawnSale(event); break;
@@ -123,6 +128,25 @@ export class Effects {
           x: pos.x + rand(-enemy.radius, enemy.radius), y: pos.y + rand(-enemy.radius, enemy.radius),
           vx: rand(-6, 6), vy: rand(-14, -3),
           life: rand(0.5, 0.9), size: rand(1.2, 2.4), color: '#dff3ff', shape: 'star', spin: rand(-3, 3),
+        });
+      }
+      if (enemy.regen > 0 && enemy.hp < enemy.maxHp && !enemy.burn && !enemy.poison && Math.random() < dt * 6) {
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius * 0.8, enemy.radius * 0.8), y: pos.y + rand(-2, 4),
+          vx: 0, vy: rand(-24, -12), life: rand(0.5, 0.8), size: rand(1, 1.6), color: '#9bff9b', shape: 'star', spin: 0,
+        });
+      }
+      if (enemy.shield && enemy.shield.hp > 0 && Math.random() < dt * 3) {
+        const a = rand(0, Math.PI * 2);
+        this.addParticle({
+          x: pos.x + Math.cos(a) * enemy.radius * 1.4, y: pos.y - enemy.radius * 0.3 + Math.sin(a) * enemy.radius * 1.2,
+          vx: 0, vy: 0, life: 0.25, size: 1.4, color: '#dff3ff', shape: 'star', spin: 5,
+        });
+      }
+      if (enemy.enraged && Math.random() < dt * 12) {
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius, enemy.radius), y: pos.y - enemy.radius * 0.4,
+          vx: rand(-10, 10), vy: rand(-50, -25), life: rand(0.3, 0.6), size: rand(1.5, 2.5), color: pick(['#ff3b2f', '#ff7a45']), shape: 'ember',
         });
       }
       if (enemy.poison && Math.random() < dt * (6 + enemy.poison.stacks * 3)) {
@@ -529,9 +553,72 @@ export class Effects {
   }
 
   spawnBossArrival(event) {
-    this.setBanner(event.name, '#ff6b6b', 'approaches');
+    const traits = event.traits && event.traits.length ? event.traits.join(' · ') : 'approaches';
+    this.setBanner(event.name, '#ff6b6b', traits);
     this.shake = Math.max(this.shake, 5);
     this.addFlash('#3a0000', 0.35);
+  }
+
+  // The boss calls reinforcements: a dark pulse and a banner.
+  spawnSummons(event) {
+    this.setBanner(`${event.name} calls for aid!`, '#c9a0ff', `${event.count} reinforcements`);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.6, size: 60, color: 'rgba(170,120,255,0.8)', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: 30, color: 'rgba(170,120,255,0.7)', shape: 'glow' });
+    for (let i = 0; i < 16; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(40, 120), vy: Math.sin(a) * rand(40, 120) - 30, life: rand(0.4, 0.8), size: rand(1.5, 3), color: pick(['#c9a0ff', '#8f7bff', '#ffffff']), shape: 'star', spin: rand(-6, 6), drag: 1.5 });
+    }
+    this.shake = Math.max(this.shake, 3);
+  }
+
+  // Rage: red flash, shockwave, banner.
+  spawnEnrage(event) {
+    this.setBanner('Enraged!', '#ff3b2f', `${event.name} is furious`);
+    this.addFlash('#5a0000', 0.3);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 50, color: 'rgba(255,60,40,0.9)', shape: 'ring' });
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(60, 160), vy: Math.sin(a) * rand(60, 160), life: rand(0.3, 0.6), size: rand(2, 4), color: pick(['#ff3b2f', '#ff9f45', '#ffd97a']), shape: 'fire', drag: 2 });
+    }
+    this.shake = Math.max(this.shake, 4);
+  }
+
+  // Thermal shock: fire meets ice. Frost ring, steam, shards, damage text.
+  spawnShatter(event) {
+    this.addText(event.x, event.y - 14, `Shatter! ${event.damage}`, '#dff3ff', 1.3);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.14, size: 20, color: '#ffffff', shape: 'flash' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.35, size: 26, color: '#8fd3ff', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: 22, color: '#ff9f45', shape: 'ring' });
+    for (let i = 0; i < 12; i++) {
+      const a = rand(0, Math.PI * 2);
+      const speed = rand(50, 150);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 40, life: rand(0.35, 0.6), size: rand(2, 3.5), color: i % 2 ? '#8fd3ff' : '#ffffff', shape: 'shard', spin: rand(-10, 10), gravity: 200 });
+    }
+    for (let i = 0; i < 6; i++) {
+      this.addParticle({ x: event.x + rand(-8, 8), y: event.y + rand(-4, 4), vx: rand(-15, 15), vy: rand(-50, -25), life: rand(0.5, 0.9), size: rand(4, 7), color: 'rgba(230,240,255,0.5)', shape: 'smoke', grow: 2 });
+    }
+    this.shake = Math.max(this.shake, 1.5);
+  }
+
+  // Shield down: blue glass shatters.
+  spawnShieldBreak(event) {
+    this.addText(event.x, event.y - 12, 'Shield down', '#7ec8ff', 0.9);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: 24, color: '#7ec8ff', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.15, size: 18, color: 'rgba(200,240,255,0.9)', shape: 'glow' });
+    for (let i = 0; i < 10; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(40, 130), vy: Math.sin(a) * rand(40, 130) - 30, life: rand(0.3, 0.6), size: rand(1.5, 3), color: pick(['#7ec8ff', '#dff3ff', '#ffffff']), shape: 'shard', spin: rand(-12, 12), gravity: 220 });
+    }
+    for (let i = 0; i < 5; i++) {
+      this.addParticle({ x: event.x, y: event.y, vx: rand(-30, 30), vy: rand(-30, 30), life: 0.2, size: 1, color: '#dff3ff', shape: 'bolt', spin: rand(-20, 20) });
+    }
+  }
+
+  spawnShieldRestore(event) {
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.4, size: 4, color: 'rgba(126,200,255,0.7)', shape: 'glow', grow: 3 });
+    for (let i = 0; i < 4; i++) {
+      this.addParticle({ x: event.x + rand(-10, 10), y: event.y + rand(-10, 10), vx: 0, vy: rand(-20, -8), life: 0.5, size: rand(1, 1.8), color: '#dff3ff', shape: 'star', spin: 3 });
+    }
   }
 
   spawnEmerge(event) {

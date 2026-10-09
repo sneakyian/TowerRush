@@ -49,7 +49,7 @@ export const LEVELS = [
     id: 'frostpeak',
     name: 'Frostpeak Pass',
     subtitle: 'Yetis and ice sprites pour down the mountain switchbacks.',
-    startingGold: 350,
+    startingGold: 410,
     startingLives: 20,
     sellRefund: 0.5,
     path: [
@@ -88,7 +88,7 @@ export const LEVELS = [
     id: 'sunscorch',
     name: 'Sunscorch Desert',
     subtitle: 'Armored scorpions and sand golems march through the dunes.',
-    startingGold: 400,
+    startingGold: 460,
     startingLives: 20,
     sellRefund: 0.5,
     path: [
@@ -129,7 +129,7 @@ export const LEVELS = [
     id: 'murkwater',
     name: 'Murkwater Swamp',
     subtitle: 'Witches and wisps shrug off arrows in the misty bog.',
-    startingGold: 480,
+    startingGold: 560,
     startingLives: 20,
     sellRefund: 0.5,
     path: [
@@ -175,7 +175,7 @@ export const LEVELS = [
     id: 'caldera',
     name: 'Ember Caldera',
     subtitle: 'The dragon\'s brood swarms out of the volcano.',
-    startingGold: 650,
+    startingGold: 800,
     startingLives: 20,
     sellRefund: 0.5,
     path: [

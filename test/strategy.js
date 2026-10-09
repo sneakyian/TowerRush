@@ -31,6 +31,17 @@ export const STRATEGIES = {
   hybrid: ['archer', 'frost', 'mage', 'tesla', 'sniper', 'flame', 'venom', 'mortar', 'laser', 'beacon', 'cannon'],
   // Only the Radiant Defense set.
   radiant: ['frost', 'tesla', 'flame', 'venom', 'laser'],
+  // A player who reads the enemy roster and builds counters: fire against
+  // the frozen, frost against the burning, lightning against shields and
+  // golems, poison against storm wisps, and damage-over-time against anything
+  // that regenerates.
+  elemental: (level) => ({
+    greenfields: ['archer', 'flame', 'mage', 'archer', 'cannon', 'tesla'],
+    frostpeak: ['flame', 'archer', 'mage', 'flame', 'tesla', 'archer'],
+    sunscorch: ['tesla', 'archer', 'mage', 'tesla', 'frost', 'archer'],
+    murkwater: ['archer', 'flame', 'mage', 'venom', 'tesla', 'flame'],
+    caldera: ['archer', 'frost', 'tesla', 'archer', 'venom', 'archer', 'frost', 'laser'],
+  })[level.id] || ['archer', 'flame', 'frost', 'tesla', 'venom', 'mage'],
   archersOnly: ['archer'],
   magesOnly: ['mage'],
   cannonsOnly: ['cannon'],
@@ -83,7 +94,8 @@ function spend(game, order, rotation, state) {
 export function playLevel(level, { strategy = 'mixed', step = 1 / 30, maxSeconds = 1200 } = {}) {
   const game = new Game(level);
   const order = spotsByPathDistance(level);
-  const rotation = STRATEGIES[strategy];
+  const chosen = STRATEGIES[strategy];
+  const rotation = typeof chosen === 'function' ? chosen(level) : chosen;
   const state = { builds: 0 };
   let elapsed = 0;
   let sinceAct = 1;

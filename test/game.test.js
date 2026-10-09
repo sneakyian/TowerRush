@@ -228,3 +228,102 @@ test('no extra waves can start after the last one', () => {
   assert.equal(game.phase, PHASE.WON);
   assert.deepEqual(game.startNextWave(), { ok: false, reason: 'no-more-waves' });
 });
+
+// --- Enemy traits: regeneration, shields, elements, boss phases -----------------
+
+import { effectiveDamage, WEAKNESS_MULTIPLIER, SHIELD_DAMAGE } from '../src/game.js';
+
+const TRAIT_ENEMIES = {
+  troll: { id: 'troll', name: 'Troll', hp: 500, speed: 10, bounty: 5, radius: 10, armor: 0.4, magicResist: 0, regen: 20, weakTo: 'fire' },
+  wisp: { id: 'wisp', name: 'Wisp', hp: 100, speed: 10, bounty: 5, radius: 8, shield: 60, element: 'storm' },
+  imp: { id: 'imp', name: 'Imp', hp: 100, speed: 10, bounty: 5, radius: 8, element: 'fire', immune: ['burn'] },
+  king: { id: 'king', name: 'King', hp: 1000, speed: 10, bounty: 50, radius: 20, boss: true, enrage: true, summons: { at: 0.5, type: 'imp', count: 3 } },
+};
+const TRAIT_TOWERS = {
+  torch: { id: 'torch', name: 'Torch', damageType: 'physical', element: 'fire', attack: 'instant', levels: [{ cost: 10, damage: 10, range: 100, fireInterval: 10, burn: { dps: 5, duration: 2 } }] },
+  wand: { id: 'wand', name: 'Wand', damageType: 'magic', element: 'arcane', projectileSpeed: 1000, levels: [{ cost: 10, damage: 10, range: 100, fireInterval: 10, splashRadius: 0 }] },
+};
+
+function traitGame() {
+  return new Game({
+    width: 400, height: 200, startingGold: 1000, startingLives: 20, sellRefund: 0.5, smoothPath: false,
+    path: [{ x: 0, y: 0 }, { x: 600, y: 0 }], buildSpots: [{ x: 150, y: 30 }],
+    waves: [{ entries: [{ type: 'imp', count: 1, interval: 1 }] }],
+  }, { towerTypes: TRAIT_TOWERS, enemyTypes: TRAIT_ENEMIES });
+}
+
+test('regenerating enemies heal over time unless burning or poisoned', () => {
+  const game = traitGame();
+  const troll = game.spawnEnemy('troll', 300);
+  troll.hp = 300;
+  game.update(1);
+  assert.ok(troll.hp > 300 && troll.hp <= 320, `healed to ${troll.hp}`);
+  game.applyBurn(troll, { dps: 1, duration: 5 }, 'physical', 'fire');
+  const before = troll.hp;
+  game.update(1);
+  assert.ok(troll.hp < before, 'burn stops regeneration and ticks damage');
+});
+
+test('an elemental weakness multiplies damage and ignores armor', () => {
+  const game = traitGame();
+  const troll = game.spawnEnemy('troll', 300);
+  game.damageEnemy(troll, 100, 'physical', { element: 'fire' });
+  assert.equal(troll.hp, 500 - 100 * WEAKNESS_MULTIPLIER);
+  game.damageEnemy(troll, 100, 'physical');
+  assert.equal(troll.hp, 500 - 100 * WEAKNESS_MULTIPLIER - effectiveDamage(100, 'physical', TRAIT_ENEMIES.troll));
+});
+
+test('energy shields absorb hits, block burns, break, and recharge', () => {
+  const game = traitGame();
+  const wisp = game.spawnEnemy('wisp', 300);
+  game.damageEnemy(wisp, 40, 'physical');
+  assert.equal(wisp.hp, 100, 'body untouched');
+  assert.equal(wisp.shield.hp, 60 - 40 * SHIELD_DAMAGE.physical);
+  game.applyBurn(wisp, { dps: 5, duration: 2 }, 'physical', 'fire');
+  assert.equal(wisp.burn, null, 'burn cannot land through a shield');
+  game.damageEnemy(wisp, 100, 'magic');
+  assert.equal(wisp.shield.hp, 0);
+  assert.ok(game.events.some((e) => e.type === 'shield-broken'));
+  game.damageEnemy(wisp, 10, 'physical');
+  assert.equal(wisp.hp, 90, 'hits land on the body once the shield is down');
+  for (let i = 0; i < 100; i++) game.update(0.1); // 10s untouched: recharges
+  assert.equal(wisp.shield.hp, 60);
+  assert.ok(game.events.some((e) => e.type === 'shield-restored'));
+});
+
+test('elemental immunity shrugs off its own status effect', () => {
+  const game = traitGame();
+  const imp = game.spawnEnemy('imp', 300);
+  game.applyBurn(imp, { dps: 5, duration: 2 }, 'physical', 'fire');
+  assert.equal(imp.burn, null);
+  game.applySlow(imp, { factor: 0.5, duration: 2 });
+  assert.ok(imp.slow, 'other statuses still land');
+});
+
+test('fire on a chilled enemy shatters both effects for true damage', () => {
+  const game = traitGame();
+  const troll = game.spawnEnemy('troll', 300);
+  game.applySlow(troll, { factor: 0.5, duration: 3 });
+  game.applyBurn(troll, { dps: 5, duration: 3 }, 'physical', 'fire');
+  assert.equal(troll.slow, null);
+  assert.equal(troll.burn, null);
+  const shatter = game.events.find((e) => e.type === 'shatter');
+  assert.ok(shatter, 'shatter event');
+  assert.equal(troll.hp, 500 - 500 * 0.08, 'true damage ignores armor');
+});
+
+test('a boss summons reinforcements at half health and enrages below a third', () => {
+  const game = traitGame();
+  const king = game.spawnEnemy('king', 300);
+  game.damageEnemy(king, 520, 'true');
+  assert.ok(game.events.some((e) => e.type === 'boss-summons'));
+  assert.equal(game.enemies.filter((e) => e.typeId === 'imp').length, 3);
+  assert.ok(game.enemies.filter((e) => e.typeId === 'imp').every((e) => e.dist < 300 && e.dist >= 0));
+  game.damageEnemy(king, 200, 'true');
+  assert.ok(king.enraged);
+  assert.equal(king.speed, 15);
+  assert.ok(game.events.some((e) => e.type === 'boss-enraged'));
+  game.damageEnemy(king, 520, 'true'); // no second summons
+  assert.equal(game.events.filter((e) => e.type === 'boss-summons').length, 1);
+});
+

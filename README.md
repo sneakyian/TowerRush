@@ -51,6 +51,35 @@ Armored golems and trolls want magic or armor-piercing fire; spectral
 sprites, wisps and witches want physical damage. Chill, poison, lightning
 and a well-placed beacon turn a good defense into a great one.
 
+### Enemy traits and elements
+
+Enemies carry traits that reward reading the roster and building counters:
+
+| Trait          | What it does                                                                 | Answer                                  |
+| -------------- | ---------------------------------------------------------------------------- | --------------------------------------- |
+| **Armored**    | Reduces physical damage                                                      | Magic, sniper rounds, lightning         |
+| **Spell-warded** | Reduces magic damage                                                       | Arrows, cannon, flame, sniper           |
+| **Regenerates** | Heals every second while left alone                                         | Burn or poison stops regeneration       |
+| **Shielded**   | An energy shield absorbs hits before health (magic ×1.5, physical ×0.75), blocks burn and poison, and recharges after 4 s untouched | Lightning and arcane bolts; keep hitting it |
+| **Element**    | Fire, ice, poison or storm; immune to its own status (fire ignores burn, ice ignores chill, poison ignores poison) | Hit the opposing element |
+| **Weak to X**  | Towers of element X deal 1.75× and ignore armor and wards                    | Frost vs fire, flame vs ice, venom vs storm, tesla vs golems |
+
+Tower elements: Frost Spire is **ice**, Flamethrower is **fire**, Venom
+Spitter is **poison**, Tesla Coil is **storm**, Mage Tower and Laser Lance
+are **arcane**.
+
+**Thermal shock:** fire on a chilled enemy, or frost on a burning one,
+shatters both effects for a burst of true damage (8% of max health).
+
+### Bosses
+
+Every boss is tougher than before and fights in phases:
+
+- At **half health** it calls reinforcements from its own army.
+- Below **a third** most bosses **enrage**: 50% faster and harder to hurt.
+- The Frost Giant and Hydra **regenerate**, the Ember Dragon carries a
+  **fire ward** shield, and each has an elemental weakness to exploit.
+
 ### Levels
 
 1. **Greenfields** — goblins, wolves, orcs. Boss: Orc Warlord
@@ -76,8 +105,9 @@ test/strategy.js Headless AI player used for balance tests
 ```
 
 The simulation runs fully headless. The balance tests play every level
-to completion with a mixed-tower strategy and assert it wins, and that no
-single tower type can carry the whole campaign.
+to completion with scripted strategies: a classic Kingdom Rush mix must
+clear the opening levels, an element-aware build must beat every level,
+and no single tower type can carry the whole campaign.
 
 ## Tests
 

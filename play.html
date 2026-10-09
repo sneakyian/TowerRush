@@ -180,6 +180,7 @@ const TOWER_TYPES = {
   },
   mage: {
     id: 'mage',
+    element: 'arcane',
     name: 'Mage Tower',
     desc: 'Slow magic bolts that ignore armor.',
     damageType: 'magic',
@@ -245,6 +246,7 @@ const TOWER_TYPES = {
   // --- Radiant Defense set: towers defined by their mechanic -------------
   frost: {
     id: 'frost',
+    element: 'ice',
     name: 'Frost Spire',
     desc: 'Ice shards that chill enemies, slowing them down.',
     damageType: 'magic',
@@ -261,6 +263,7 @@ const TOWER_TYPES = {
   },
   tesla: {
     id: 'tesla',
+    element: 'storm',
     name: 'Tesla Coil',
     desc: 'Lightning that arcs from enemy to enemy.',
     damageType: 'magic',
@@ -277,6 +280,7 @@ const TOWER_TYPES = {
   },
   flame: {
     id: 'flame',
+    element: 'fire',
     name: 'Flamethrower',
     desc: 'Short-range fire that leaves enemies burning.',
     damageType: 'physical',
@@ -292,6 +296,7 @@ const TOWER_TYPES = {
   },
   venom: {
     id: 'venom',
+    element: 'poison',
     name: 'Venom Spitter',
     desc: 'Poison that stacks with every hit; keep spitting and heavies melt.',
     damageType: 'magic',
@@ -309,6 +314,7 @@ const TOWER_TYPES = {
   },
   laser: {
     id: 'laser',
+    element: 'arcane',
     name: 'Laser Lance',
     desc: 'A steady beam that burns hotter the longer it holds a target.',
     damageType: 'magic',
@@ -345,6 +351,15 @@ const MAX_TOWER_LEVEL = 4;
 
 // `lives` is what an enemy costs if it reaches the castle (default 1):
 // heavy brutes cost 2, bosses cost 5.
+// Traits:
+//   regen     hp per second, stopped while burning or poisoned
+//   shield    energy shield hp; absorbs hits (magic x1.5, physical x0.5),
+//             blocks every status while up, recharges after 3s untouched
+//   element   fire | ice | poison | storm, shown on the sprite
+//   immune    statuses that never land: 'burn' | 'slow' | 'poison'
+//   weakTo    tower element that deals 1.5x: fire | ice | poison | storm | arcane
+//   summons   boss calls { count } of { type } when its hp drops to { at }
+//   enrage    boss speeds up (and hardens) below 30% hp
 // `look` drives the sprite composer in render.js:
 //   body: 'round' | 'long' | 'big' | 'wisp'
 //   features: any of ears, club, tooth, wolf, helmet, pads, tusks, shell,
@@ -362,14 +377,16 @@ const ENEMY_TYPES = {
     look: { body: 'long', features: ['wolf'] },
   },
   orc: {
-    id: 'orc', name: 'Orc', hp: 110, speed: 40, bounty: 18, radius: 12, lives: 2,
+    id: 'orc', name: 'Orc', hp: 110, speed: 40, bounty: 22, radius: 12, lives: 2,
     armor: 0.3, magicResist: 0, color: '#3e7d3e',
     look: { body: 'round', features: ['helmet', 'pads', 'tusks'] },
   },
   orcWarlord: {
-    id: 'orcWarlord', name: 'Orc Warlord', hp: 380, speed: 32, bounty: 150, radius: 19, lives: 5,
+    id: 'orcWarlord', name: 'Orc Warlord', hp: 650, speed: 32, bounty: 150, radius: 19, lives: 5,
     armor: 0.35, magicResist: 0.1, color: '#2f6b2f', boss: true,
     look: { body: 'big', features: ['helmet', 'pads', 'tusks', 'crown'] },
+    regen: 4, enrage: true,
+    summons: { at: 0.5, type: 'orc', count: 4 },
   },
 
   // --- Level 2: Frostpeak ---
@@ -379,24 +396,29 @@ const ENEMY_TYPES = {
     look: { body: 'long', features: ['wolf'] },
   },
   iceSprite: {
-    id: 'iceSprite', name: 'Ice Sprite', hp: 45, speed: 85, bounty: 10, radius: 8,
+    id: 'iceSprite', name: 'Ice Sprite', hp: 45, speed: 85, bounty: 14, radius: 8,
     armor: 0, magicResist: 0.7, color: '#8fd3ff',
     look: { body: 'wisp', features: ['glow', 'wings'] },
+    shield: 15, element: 'ice', immune: ['slow'], weakTo: 'fire',
   },
   yeti: {
-    id: 'yeti', name: 'Yeti', hp: 200, speed: 42, bounty: 24, radius: 13, lives: 2,
+    id: 'yeti', name: 'Yeti', hp: 200, speed: 42, bounty: 28, radius: 13, lives: 2,
     armor: 0.25, magicResist: 0, color: '#d8dde3',
     look: { body: 'round', features: ['horns', 'tooth'] },
+    element: 'ice', immune: ['slow'], weakTo: 'fire',
   },
   frostTroll: {
-    id: 'frostTroll', name: 'Frost Troll', hp: 380, speed: 34, bounty: 40, radius: 14, lives: 2,
+    id: 'frostTroll', name: 'Frost Troll', hp: 380, speed: 34, bounty: 52, radius: 14, lives: 2,
     armor: 0.45, magicResist: 0, color: '#6f9fbf',
     look: { body: 'round', features: ['pads', 'tusks', 'club'] },
+    regen: 5, element: 'ice', immune: ['slow'], weakTo: 'fire',
   },
   frostGiant: {
-    id: 'frostGiant', name: 'Frost Giant', hp: 650, speed: 28, bounty: 300, radius: 21, lives: 5,
+    id: 'frostGiant', name: 'Frost Giant', hp: 2500, speed: 28, bounty: 300, radius: 21, lives: 5,
     armor: 0.4, magicResist: 0.25, color: '#5d8fb3', boss: true,
     look: { body: 'big', features: ['horns', 'pads', 'club', 'crown', 'scarf'] },
+    regen: 10, element: 'ice', immune: ['slow'], weakTo: 'fire', enrage: true,
+    summons: { at: 0.5, type: 'snowWolf', count: 6 },
   },
 
   // --- Level 3: Sunscorch Desert ---
@@ -411,73 +433,89 @@ const ENEMY_TYPES = {
     look: { body: 'round', features: ['hat', 'scarf'] },
   },
   duneWasp: {
-    id: 'duneWasp', name: 'Dune Wasp', hp: 45, speed: 130, bounty: 10, radius: 7,
+    id: 'duneWasp', name: 'Dune Wasp', hp: 45, speed: 130, bounty: 13, radius: 7,
     armor: 0, magicResist: 0.4, color: '#e8c33a',
     look: { body: 'wisp', features: ['wings', 'stinger'] },
+    shield: 15,
   },
   sandGolem: {
-    id: 'sandGolem', name: 'Sand Golem', hp: 400, speed: 30, bounty: 50, radius: 15, lives: 2,
+    id: 'sandGolem', name: 'Sand Golem', hp: 400, speed: 30, bounty: 64, radius: 15, lives: 2,
     armor: 0.6, magicResist: 0, color: '#d9b36c',
     look: { body: 'round', features: ['shell', 'spikes'] },
+    regen: 4, weakTo: 'storm',
   },
   sandWyrm: {
-    id: 'sandWyrm', name: 'Sand Wyrm', hp: 1000, speed: 34, bounty: 450, radius: 22, lives: 5,
+    id: 'sandWyrm', name: 'Sand Wyrm', hp: 2200, speed: 34, bounty: 450, radius: 22, lives: 5,
     armor: 0.5, magicResist: 0.2, color: '#c9953f', boss: true,
     look: { body: 'big', features: ['shell', 'spikes', 'tusks', 'crown'] },
+    regen: 12, weakTo: 'storm', enrage: true,
+    summons: { at: 0.5, type: 'scorpion', count: 8 },
   },
 
   // --- Level 4: Murkwater Swamp ---
   bogFrog: {
-    id: 'bogFrog', name: 'Bog Frog', hp: 60, speed: 100, bounty: 10, radius: 9,
+    id: 'bogFrog', name: 'Bog Frog', hp: 60, speed: 100, bounty: 12, radius: 9,
     armor: 0, magicResist: 0.2, color: '#5fae3a',
     look: { body: 'round', features: ['frog'] },
+    element: 'poison', immune: ['poison'],
   },
   willOWisp: {
-    id: 'willOWisp', name: 'Will-o-Wisp', hp: 45, speed: 115, bounty: 12, radius: 7,
+    id: 'willOWisp', name: 'Will-o-Wisp', hp: 45, speed: 115, bounty: 16, radius: 7,
     armor: 0, magicResist: 0.9, color: '#a8ffc8',
     look: { body: 'wisp', features: ['glow', 'flame'] },
+    shield: 15, element: 'storm', weakTo: 'poison',
   },
   swampWitch: {
-    id: 'swampWitch', name: 'Swamp Witch', hp: 130, speed: 55, bounty: 26, radius: 10,
+    id: 'swampWitch', name: 'Swamp Witch', hp: 130, speed: 55, bounty: 34, radius: 10,
     armor: 0.1, magicResist: 0.7, color: '#7a5c9e',
     look: { body: 'round', features: ['hat', 'glow'] },
+    shield: 30, element: 'poison', immune: ['poison'], weakTo: 'fire',
   },
   bogTroll: {
-    id: 'bogTroll', name: 'Bog Troll', hp: 540, speed: 32, bounty: 60, radius: 15, lives: 2,
+    id: 'bogTroll', name: 'Bog Troll', hp: 540, speed: 32, bounty: 78, radius: 15, lives: 2,
     armor: 0.4, magicResist: 0.2, color: '#4f6b3a',
     look: { body: 'round', features: ['tusks', 'club', 'pads'] },
+    regen: 8, weakTo: 'fire',
   },
   hydra: {
-    id: 'hydra', name: 'Hydra', hp: 2000, speed: 30, bounty: 700, radius: 23, lives: 5,
+    id: 'hydra', name: 'Hydra', hp: 4200, speed: 30, bounty: 700, radius: 23, lives: 5,
     armor: 0.35, magicResist: 0.4, color: '#3f8a5a', boss: true,
     look: { body: 'big', features: ['horns', 'spikes', 'tusks', 'crown', 'glow'] },
+    regen: 35, element: 'poison', immune: ['poison'], weakTo: 'fire',
+    summons: { at: 0.5, type: 'bogFrog', count: 10 },
   },
 
   // --- Level 5: Ember Caldera ---
   fireImp: {
-    id: 'fireImp', name: 'Fire Imp', hp: 70, speed: 115, bounty: 14, radius: 8,
+    id: 'fireImp', name: 'Fire Imp', hp: 70, speed: 115, bounty: 17, radius: 8,
     armor: 0, magicResist: 0.6, color: '#e8552f',
     look: { body: 'round', features: ['horns', 'flame', 'tooth'] },
+    element: 'fire', immune: ['burn'], weakTo: 'ice',
   },
   lavaHound: {
-    id: 'lavaHound', name: 'Lava Hound', hp: 150, speed: 75, bounty: 24, radius: 10,
+    id: 'lavaHound', name: 'Lava Hound', hp: 150, speed: 75, bounty: 30, radius: 10,
     armor: 0.35, magicResist: 0.3, color: '#8a2f1f',
     look: { body: 'long', features: ['wolf', 'flame'] },
+    element: 'fire', immune: ['burn'], weakTo: 'ice',
   },
   ashWraith: {
-    id: 'ashWraith', name: 'Ash Wraith', hp: 150, speed: 75, bounty: 30, radius: 9,
+    id: 'ashWraith', name: 'Ash Wraith', hp: 150, speed: 75, bounty: 40, radius: 9,
     armor: 0, magicResist: 0.85, color: '#6c6c7a',
     look: { body: 'wisp', features: ['glow', 'hat'] },
+    shield: 45, element: 'storm', weakTo: 'poison',
   },
   obsidianGolem: {
-    id: 'obsidianGolem', name: 'Obsidian Golem', hp: 720, speed: 28, bounty: 90, radius: 16, lives: 2,
+    id: 'obsidianGolem', name: 'Obsidian Golem', hp: 720, speed: 28, bounty: 115, radius: 16, lives: 2,
     armor: 0.7, magicResist: 0.2, color: '#2c2c34',
     look: { body: 'round', features: ['shell', 'spikes', 'glow'] },
+    regen: 5, weakTo: 'storm',
   },
   dragon: {
-    id: 'dragon', name: 'Ember Dragon', hp: 2400, speed: 30, bounty: 1200, radius: 24, lives: 5,
+    id: 'dragon', name: 'Ember Dragon', hp: 8000, speed: 30, bounty: 1200, radius: 24, lives: 5,
     armor: 0.45, magicResist: 0.45, color: '#b8321f', boss: true,
     look: { body: 'big', features: ['wings', 'horns', 'spikes', 'flame', 'crown'] },
+    shield: 900, element: 'fire', immune: ['burn'], weakTo: 'ice', regen: 20, enrage: true,
+    summons: { at: 0.5, type: 'fireImp', count: 10 },
   },
 };
 
@@ -532,7 +570,7 @@ const LEVELS = [
     id: 'frostpeak',
     name: 'Frostpeak Pass',
     subtitle: 'Yetis and ice sprites pour down the mountain switchbacks.',
-    startingGold: 350,
+    startingGold: 410,
     startingLives: 20,
     sellRefund: 0.5,
     path: [
@@ -571,7 +609,7 @@ const LEVELS = [
     id: 'sunscorch',
     name: 'Sunscorch Desert',
     subtitle: 'Armored scorpions and sand golems march through the dunes.',
-    startingGold: 400,
+    startingGold: 460,
     startingLives: 20,
     sellRefund: 0.5,
     path: [
@@ -612,7 +650,7 @@ const LEVELS = [
     id: 'murkwater',
     name: 'Murkwater Swamp',
     subtitle: 'Witches and wisps shrug off arrows in the misty bog.',
-    startingGold: 480,
+    startingGold: 560,
     startingLives: 20,
     sellRefund: 0.5,
     path: [
@@ -658,7 +696,7 @@ const LEVELS = [
     id: 'caldera',
     name: 'Ember Caldera',
     subtitle: 'The dragon\'s brood swarms out of the volcano.',
-    startingGold: 650,
+    startingGold: 800,
     startingLives: 20,
     sellRefund: 0.5,
     path: [
@@ -824,10 +862,41 @@ const PHASE = {
 
 // Physical damage is cut by armor, magic damage by magic resistance.
 function effectiveDamage(amount, damageType, enemyType, armorPierce = 0) {
+  if (damageType === 'true') return amount; // ignores armor and resistance
   const reduction = damageType === 'magic'
     ? enemyType.magicResist || 0
     : (enemyType.armor || 0) * (1 - armorPierce);
   return amount * (1 - reduction);
+}
+
+// Elemental traits. An enemy `weakTo` an element takes WEAKNESS_MULTIPLIER
+// from towers of that element, ignoring its armor and magic resistance;
+// `immune` lists the status effects it shrugs off. Energy shields absorb hits before health: magic tears through them,
+// physical barely scratches them, and no burn or poison lands while one is up.
+const WEAKNESS_MULTIPLIER = 1.75;
+const SHIELD_DAMAGE = { magic: 1.5, physical: 0.75, true: 1 };
+const SHIELD_RECHARGE_DELAY = 4; // seconds without a hit before recharging
+const SHIELD_RECHARGE_RATE = 0.25; // fraction of max shield per second
+// Thermal shock: fire on a chilled enemy (or frost on a burning one) shatters
+// both effects for a burst of true damage.
+const SHATTER_FRACTION = 0.08;
+const SHATTER_CAP = { normal: 150, boss: 220 };
+const ENRAGE_THRESHOLD = 0.3;
+const ENRAGE_SPEED = 1.5;
+const ENRAGE_ARMOR = 0.1;
+
+// Short, player-facing summary of an enemy type's traits.
+function describeTraits(type) {
+  const out = [];
+  if (type.armor >= 0.3) out.push('Armored');
+  if (type.magicResist >= 0.5) out.push('Spell-warded');
+  if (type.regen) out.push('Regenerates');
+  if (type.shield) out.push('Shielded');
+  if (type.element) out.push(`${type.element[0].toUpperCase()}${type.element.slice(1)}`);
+  if (type.weakTo) out.push(`Weak to ${type.weakTo}`);
+  if (type.summons) out.push('Summons');
+  if (type.enrage) out.push('Enrages');
+  return out;
 }
 
 class Game {
@@ -981,29 +1050,45 @@ class Game {
   spawnEnemies() {
     while (this.spawnQueue.length > 0 && this.spawnQueue[0].at <= this.waveTime) {
       const { typeId } = this.spawnQueue.shift();
-      const type = this.enemyTypes[typeId];
-      this.enemies.push({
-        id: this.nextEnemyId++,
-        typeId,
-        hp: type.hp,
-        maxHp: type.hp,
-        speed: type.speed,
-        bounty: type.bounty,
-        radius: type.radius,
-        boss: !!type.boss,
-        livesCost: type.lives || 1,
-        dist: 0,
-        alive: true,
-        flash: 0, // seconds of white hit-flash left, for rendering
-        slow: null, // { factor, remaining } while chilled
-        burn: null, // { dps, remaining, damageType } while burning
-        poison: null, // { stacks, dpsPerStack, remaining } while poisoned
-        age: 0, // seconds since spawning, for the renderer
-      });
-      const pos = this.path.positionAt(0);
-      this.pushEvent({ type: 'enemy-spawned', x: pos.x, y: pos.y, enemyType: typeId });
-      if (type.boss) this.pushEvent({ type: 'boss-spawned', name: type.name, enemyType: typeId });
+      this.spawnEnemy(typeId, 0);
     }
+  }
+
+  // Put one enemy on the path at `dist`. Used by the wave spawner and by
+  // bosses that call reinforcements.
+  spawnEnemy(typeId, dist = 0) {
+    const type = this.enemyTypes[typeId];
+    const enemy = {
+      id: this.nextEnemyId++,
+      typeId,
+      hp: type.hp,
+      maxHp: type.hp,
+      speed: type.speed,
+      bounty: type.bounty,
+      radius: type.radius,
+      boss: !!type.boss,
+      livesCost: type.lives || 1,
+      dist,
+      alive: true,
+      flash: 0, // seconds of white hit-flash left, for rendering
+      slow: null, // { factor, remaining } while chilled
+      burn: null, // { dps, remaining, damageType, element } while burning
+      poison: null, // { stacks, dpsPerStack, remaining } while poisoned
+      age: 0, // seconds since spawning, for the renderer
+      // Traits.
+      regen: type.regen || 0, // hp per second, suppressed while burning or poisoned
+      shield: type.shield ? { hp: type.shield, max: type.shield, sinceHit: 0 } : null,
+      element: type.element || null,
+      immune: type.immune || [],
+      weakTo: type.weakTo || null,
+      enraged: false,
+      summoned: false,
+    };
+    this.enemies.push(enemy);
+    const pos = this.path.positionAt(dist);
+    this.pushEvent({ type: 'enemy-spawned', x: pos.x, y: pos.y, enemyType: typeId });
+    if (type.boss) this.pushEvent({ type: 'boss-spawned', name: type.name, enemyType: typeId, traits: describeTraits(type) });
+    return enemy;
   }
 
   moveEnemies(dt) {
@@ -1016,16 +1101,32 @@ class Game {
         if (enemy.slow.remaining <= 0) enemy.slow = null;
       }
       if (enemy.burn) {
-        this.damageEnemy(enemy, enemy.burn.dps * dt, enemy.burn.damageType, { flash: false });
+        this.damageEnemy(enemy, enemy.burn.dps * dt, enemy.burn.damageType, { flash: false, element: enemy.burn.element });
         enemy.burn.remaining -= dt;
         if (enemy.burn.remaining <= 0) enemy.burn = null;
         if (!enemy.alive) continue;
       }
       if (enemy.poison) {
-        this.damageEnemy(enemy, enemy.poison.dpsPerStack * enemy.poison.stacks * dt, 'magic', { flash: false });
+        this.damageEnemy(enemy, enemy.poison.dpsPerStack * enemy.poison.stacks * dt, 'magic', { flash: false, element: 'poison' });
         enemy.poison.remaining -= dt;
         if (enemy.poison.remaining <= 0) enemy.poison = null;
         if (!enemy.alive) continue;
+      }
+      // Regeneration, unless a damage-over-time effect is eating at it.
+      if (enemy.regen > 0 && !enemy.burn && !enemy.poison && enemy.hp < enemy.maxHp) {
+        enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.regen * dt);
+      }
+      // Shields recharge once they have been left alone for a moment.
+      if (enemy.shield) {
+        enemy.shield.sinceHit += dt;
+        if (enemy.shield.hp < enemy.shield.max && enemy.shield.sinceHit >= SHIELD_RECHARGE_DELAY) {
+          const wasDown = enemy.shield.hp <= 0;
+          enemy.shield.hp = Math.min(enemy.shield.max, enemy.shield.hp + enemy.shield.max * SHIELD_RECHARGE_RATE * dt);
+          if (wasDown) {
+            const pos = this.path.positionAt(enemy.dist);
+            this.pushEvent({ type: 'shield-restored', x: pos.x, y: pos.y, enemyType: enemy.typeId });
+          }
+        }
       }
       enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
       if (enemy.dist >= this.path.totalLength) {
@@ -1104,14 +1205,15 @@ class Game {
           slow: stats.slow || null,
           poison: stats.poison || null,
           color: type.color,
+          element: type.element || null,
           towerType: tower.typeId,
           towerLevel: tower.level,
           dirX: 0,
           dirY: 0,
         });
       } else if (attack === 'instant') {
-        this.damageEnemy(target, stats.damage * boost, type.damageType);
-        if (stats.burn) this.applyBurn(target, { dps: stats.burn.dps * boost, duration: stats.burn.duration }, type.damageType);
+        this.damageEnemy(target, stats.damage * boost, type.damageType, { element: type.element });
+        if (stats.burn) this.applyBurn(target, { dps: stats.burn.dps * boost, duration: stats.burn.duration }, type.damageType, type.element);
         this.pushEvent({ type: 'hit', x: pos.x, y: pos.y, towerType: tower.typeId, level: tower.level, splash: 0 });
       } else if (attack === 'chain') {
         this.chainLightning(spot, target, stats, type, tower, boost);
@@ -1130,7 +1232,7 @@ class Game {
       const pos = this.path.positionAt(current.dist);
       points.push(pos);
       struck.add(current.id);
-      this.damageEnemy(current, damage, type.damageType);
+      this.damageEnemy(current, damage, type.damageType, { element: type.element });
       damage *= stats.falloff;
       let next = null;
       let best = Infinity;
@@ -1167,7 +1269,7 @@ class Game {
     const multiplier = 1 + (stats.rampMultiplier - 1) * ramp;
     const pos = this.path.positionAt(target.dist);
     tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
-    this.damageEnemy(target, stats.dps * multiplier * boost * dt, type.damageType, { flash: false });
+    this.damageEnemy(target, stats.dps * multiplier * boost * dt, type.damageType, { flash: false, element: type.element });
   }
 
   // Current damage multiplier of a beam tower, for the HUD and renderer.
@@ -1178,6 +1280,8 @@ class Game {
   }
 
   applySlow(enemy, slow) {
+    if (!this.canAfflict(enemy, 'slow')) return;
+    if (enemy.burn) return this.shatter(enemy);
     // A stronger or fresher chill replaces a weaker one; never stacks.
     if (!enemy.slow || slow.factor <= enemy.slow.factor) {
       enemy.slow = { factor: slow.factor, remaining: slow.duration };
@@ -1187,6 +1291,7 @@ class Game {
   }
 
   applyPoison(enemy, poison) {
+    if (!this.canAfflict(enemy, 'poison')) return;
     if (!enemy.poison) {
       enemy.poison = { stacks: 1, dpsPerStack: poison.dpsPerStack, remaining: poison.duration };
     } else {
@@ -1196,9 +1301,11 @@ class Game {
     }
   }
 
-  applyBurn(enemy, burn, damageType) {
+  applyBurn(enemy, burn, damageType, element = 'fire') {
+    if (!this.canAfflict(enemy, 'burn')) return;
+    if (enemy.slow) return this.shatter(enemy);
     if (!enemy.burn || burn.dps >= enemy.burn.dps) {
-      enemy.burn = { dps: burn.dps, remaining: burn.duration, damageType };
+      enemy.burn = { dps: burn.dps, remaining: burn.duration, damageType, element };
     } else {
       enemy.burn.remaining = Math.max(enemy.burn.remaining, burn.duration);
     }
@@ -1267,23 +1374,38 @@ class Game {
         if (!enemy.alive) continue;
         const pos = this.path.positionAt(enemy.dist);
         if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
-          this.damageEnemy(enemy, proj.damage, proj.damageType, { armorPierce: proj.armorPierce });
+          this.damageEnemy(enemy, proj.damage, proj.damageType, { armorPierce: proj.armorPierce, element: proj.element });
           if (proj.slow) this.applySlow(enemy, proj.slow);
           if (proj.poison) this.applyPoison(enemy, proj.poison);
         }
       }
     } else if (directTarget) {
-      this.damageEnemy(directTarget, proj.damage, proj.damageType, { armorPierce: proj.armorPierce });
+      this.damageEnemy(directTarget, proj.damage, proj.damageType, { armorPierce: proj.armorPierce, element: proj.element });
       if (proj.slow) this.applySlow(directTarget, proj.slow);
       if (proj.poison) this.applyPoison(directTarget, proj.poison);
     }
   }
 
-  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0 } = {}) {
+  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0, element = null } = {}) {
     if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
-    enemy.hp -= effectiveDamage(amount, damageType, type, armorPierce);
+    const weak = element && enemy.weakTo === element ? WEAKNESS_MULTIPLIER : 1;
     if (flash) enemy.flash = 0.12;
+    // An energy shield takes the hit instead of the body.
+    if (enemy.shield && enemy.shield.hp > 0) {
+      enemy.shield.sinceHit = 0;
+      enemy.shield.hp -= amount * (SHIELD_DAMAGE[damageType] ?? 1) * weak;
+      if (enemy.shield.hp <= 0) {
+        enemy.shield.hp = 0;
+        const pos = this.path.positionAt(enemy.dist);
+        this.pushEvent({ type: 'shield-broken', x: pos.x, y: pos.y, enemyType: enemy.typeId, boss: enemy.boss });
+      }
+      return;
+    }
+    const stats = enemy.enraged ? { ...type, armor: (type.armor || 0) + ENRAGE_ARMOR } : type;
+    // A weakness cuts straight through armor and wards as well as hitting harder.
+    enemy.hp -= weak > 1 ? amount * weak : effectiveDamage(amount, damageType, stats, armorPierce);
+    if (enemy.alive && enemy.hp > 0) this.checkBossPhases(enemy, type);
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;
@@ -1297,6 +1419,43 @@ class Game {
         boss: enemy.boss,
       });
     }
+  }
+
+  // Bosses hit back as they weaken: a summoning call at one threshold and a
+  // rage below another.
+  checkBossPhases(enemy, type) {
+    const frac = enemy.hp / enemy.maxHp;
+    if (type.summons && !enemy.summoned && frac <= type.summons.at) {
+      enemy.summoned = true;
+      for (let i = 0; i < type.summons.count; i++) {
+        this.spawnEnemy(type.summons.type, Math.max(0, enemy.dist - 14 - i * 12));
+      }
+      const pos = this.path.positionAt(enemy.dist);
+      this.pushEvent({ type: 'boss-summons', x: pos.x, y: pos.y, name: type.name, count: type.summons.count, enemyType: type.summons.type });
+    }
+    if (type.enrage && !enemy.enraged && frac <= ENRAGE_THRESHOLD) {
+      enemy.enraged = true;
+      enemy.speed = type.speed * ENRAGE_SPEED;
+      const pos = this.path.positionAt(enemy.dist);
+      this.pushEvent({ type: 'boss-enraged', x: pos.x, y: pos.y, name: type.name });
+    }
+  }
+
+  // Can this status land? Shields keep burn and poison off the body (chill
+  // still bites through); elements grant outright immunities.
+  canAfflict(enemy, status) {
+    if (status !== 'slow' && enemy.shield && enemy.shield.hp > 0) return false;
+    return !(enemy.immune || []).includes(status);
+  }
+
+  // Fire meets ice: both effects are consumed in a burst of true damage.
+  shatter(enemy) {
+    const burst = Math.min(enemy.maxHp * SHATTER_FRACTION, enemy.boss ? SHATTER_CAP.boss : SHATTER_CAP.normal);
+    enemy.slow = null;
+    enemy.burn = null;
+    const pos = this.path.positionAt(enemy.dist);
+    this.pushEvent({ type: 'shatter', x: pos.x, y: pos.y, damage: Math.round(burst), enemyType: enemy.typeId });
+    this.damageEnemy(enemy, burst, 'true');
   }
 
   cleanupAndCheckEnd() {
@@ -1382,6 +1541,11 @@ class Effects {
         case 'enemy-died': event.boss ? this.spawnBossDeath(event) : this.spawnDeath(event); break;
         case 'enemy-spawned': this.spawnEmerge(event); break;
         case 'boss-spawned': this.spawnBossArrival(event); break;
+        case 'boss-summons': this.spawnSummons(event); break;
+        case 'boss-enraged': this.spawnEnrage(event); break;
+        case 'shatter': this.spawnShatter(event); break;
+        case 'shield-broken': this.spawnShieldBreak(event); break;
+        case 'shield-restored': this.spawnShieldRestore(event); break;
         case 'enemy-leaked': this.spawnLeak(event); break;
         case 'tower-built': this.spawnConstruction(event); break;
         case 'tower-sold': this.spawnSale(event); break;
@@ -1442,6 +1606,25 @@ class Effects {
           x: pos.x + rand(-enemy.radius, enemy.radius), y: pos.y + rand(-enemy.radius, enemy.radius),
           vx: rand(-6, 6), vy: rand(-14, -3),
           life: rand(0.5, 0.9), size: rand(1.2, 2.4), color: '#dff3ff', shape: 'star', spin: rand(-3, 3),
+        });
+      }
+      if (enemy.regen > 0 && enemy.hp < enemy.maxHp && !enemy.burn && !enemy.poison && Math.random() < dt * 6) {
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius * 0.8, enemy.radius * 0.8), y: pos.y + rand(-2, 4),
+          vx: 0, vy: rand(-24, -12), life: rand(0.5, 0.8), size: rand(1, 1.6), color: '#9bff9b', shape: 'star', spin: 0,
+        });
+      }
+      if (enemy.shield && enemy.shield.hp > 0 && Math.random() < dt * 3) {
+        const a = rand(0, Math.PI * 2);
+        this.addParticle({
+          x: pos.x + Math.cos(a) * enemy.radius * 1.4, y: pos.y - enemy.radius * 0.3 + Math.sin(a) * enemy.radius * 1.2,
+          vx: 0, vy: 0, life: 0.25, size: 1.4, color: '#dff3ff', shape: 'star', spin: 5,
+        });
+      }
+      if (enemy.enraged && Math.random() < dt * 12) {
+        this.addParticle({
+          x: pos.x + rand(-enemy.radius, enemy.radius), y: pos.y - enemy.radius * 0.4,
+          vx: rand(-10, 10), vy: rand(-50, -25), life: rand(0.3, 0.6), size: rand(1.5, 2.5), color: pick(['#ff3b2f', '#ff7a45']), shape: 'ember',
         });
       }
       if (enemy.poison && Math.random() < dt * (6 + enemy.poison.stacks * 3)) {
@@ -1848,9 +2031,72 @@ class Effects {
   }
 
   spawnBossArrival(event) {
-    this.setBanner(event.name, '#ff6b6b', 'approaches');
+    const traits = event.traits && event.traits.length ? event.traits.join(' · ') : 'approaches';
+    this.setBanner(event.name, '#ff6b6b', traits);
     this.shake = Math.max(this.shake, 5);
     this.addFlash('#3a0000', 0.35);
+  }
+
+  // The boss calls reinforcements: a dark pulse and a banner.
+  spawnSummons(event) {
+    this.setBanner(`${event.name} calls for aid!`, '#c9a0ff', `${event.count} reinforcements`);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.6, size: 60, color: 'rgba(170,120,255,0.8)', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: 30, color: 'rgba(170,120,255,0.7)', shape: 'glow' });
+    for (let i = 0; i < 16; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(40, 120), vy: Math.sin(a) * rand(40, 120) - 30, life: rand(0.4, 0.8), size: rand(1.5, 3), color: pick(['#c9a0ff', '#8f7bff', '#ffffff']), shape: 'star', spin: rand(-6, 6), drag: 1.5 });
+    }
+    this.shake = Math.max(this.shake, 3);
+  }
+
+  // Rage: red flash, shockwave, banner.
+  spawnEnrage(event) {
+    this.setBanner('Enraged!', '#ff3b2f', `${event.name} is furious`);
+    this.addFlash('#5a0000', 0.3);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 50, color: 'rgba(255,60,40,0.9)', shape: 'ring' });
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(60, 160), vy: Math.sin(a) * rand(60, 160), life: rand(0.3, 0.6), size: rand(2, 4), color: pick(['#ff3b2f', '#ff9f45', '#ffd97a']), shape: 'fire', drag: 2 });
+    }
+    this.shake = Math.max(this.shake, 4);
+  }
+
+  // Thermal shock: fire meets ice. Frost ring, steam, shards, damage text.
+  spawnShatter(event) {
+    this.addText(event.x, event.y - 14, `Shatter! ${event.damage}`, '#dff3ff', 1.3);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.14, size: 20, color: '#ffffff', shape: 'flash' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.35, size: 26, color: '#8fd3ff', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: 22, color: '#ff9f45', shape: 'ring' });
+    for (let i = 0; i < 12; i++) {
+      const a = rand(0, Math.PI * 2);
+      const speed = rand(50, 150);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 40, life: rand(0.35, 0.6), size: rand(2, 3.5), color: i % 2 ? '#8fd3ff' : '#ffffff', shape: 'shard', spin: rand(-10, 10), gravity: 200 });
+    }
+    for (let i = 0; i < 6; i++) {
+      this.addParticle({ x: event.x + rand(-8, 8), y: event.y + rand(-4, 4), vx: rand(-15, 15), vy: rand(-50, -25), life: rand(0.5, 0.9), size: rand(4, 7), color: 'rgba(230,240,255,0.5)', shape: 'smoke', grow: 2 });
+    }
+    this.shake = Math.max(this.shake, 1.5);
+  }
+
+  // Shield down: blue glass shatters.
+  spawnShieldBreak(event) {
+    this.addText(event.x, event.y - 12, 'Shield down', '#7ec8ff', 0.9);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: 24, color: '#7ec8ff', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.15, size: 18, color: 'rgba(200,240,255,0.9)', shape: 'glow' });
+    for (let i = 0; i < 10; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(40, 130), vy: Math.sin(a) * rand(40, 130) - 30, life: rand(0.3, 0.6), size: rand(1.5, 3), color: pick(['#7ec8ff', '#dff3ff', '#ffffff']), shape: 'shard', spin: rand(-12, 12), gravity: 220 });
+    }
+    for (let i = 0; i < 5; i++) {
+      this.addParticle({ x: event.x, y: event.y, vx: rand(-30, 30), vy: rand(-30, 30), life: 0.2, size: 1, color: '#dff3ff', shape: 'bolt', spin: rand(-20, 20) });
+    }
+  }
+
+  spawnShieldRestore(event) {
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.4, size: 4, color: 'rgba(126,200,255,0.7)', shape: 'glow', grow: 3 });
+    for (let i = 0; i < 4; i++) {
+      this.addParticle({ x: event.x + rand(-10, 10), y: event.y + rand(-10, 10), vx: 0, vy: rand(-20, -8), life: 0.5, size: rand(1, 1.8), color: '#dff3ff', shape: 'star', spin: 3 });
+    }
   }
 
   spawnEmerge(event) {
@@ -6071,6 +6317,9 @@ function drawEnemies(ctx, game, time) {
       ctx.fill();
     }
 
+    // Trait visuals: elemental aura, regeneration pulse, energy shield, rage.
+    drawEnemyTraits(ctx, enemy, x, y, pos, r, time);
+
     // White hit-flash overlay while enemy.flash runs down.
     if (enemy.flash > 0) {
       ctx.globalAlpha = (enemy.flash / 0.12) * 0.65;
@@ -6932,6 +7181,113 @@ function drawTexts(ctx, effects) {
   ctx.globalAlpha = 1;
 }
 
+const ELEMENT_COLORS = {
+  fire: [255, 120, 40],
+  ice: [143, 211, 255],
+  poison: [143, 211, 58],
+  storm: [126, 200, 255],
+  arcane: [185, 167, 255],
+};
+
+function drawEnemyTraits(ctx, enemy, x, y, pos, r, time) {
+  // Elemental aura: a tinted ring at the feet with two orbiting motes.
+  if (enemy.element && ELEMENT_COLORS[enemy.element]) {
+    const [cr, cg, cb] = ELEMENT_COLORS[enemy.element];
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(${cr},${cg},${cb},${0.45 + Math.sin(time * 4 + enemy.id) * 0.15})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(pos.x, pos.y + r * 0.55, r * 1.15, r * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(${cr},${cg},${cb},0.9)`;
+    for (let m = 0; m < 2; m++) {
+      const a = time * 3 + enemy.id + m * Math.PI;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a) * r * 1.3, y + Math.sin(a) * r * 0.5, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // Regeneration: green pulse while knitting back together.
+  if (enemy.regen > 0 && enemy.hp < enemy.maxHp && !enemy.burn && !enemy.poison) {
+    const pulse = (time * 1.2 + enemy.id * 0.3) % 1;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(120,255,140,${0.6 * (1 - pulse)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, r * (0.6 + pulse * 0.7), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // Energy shield: faceted bubble that cracks as it drains, flickers while recharging.
+  if (enemy.shield) {
+    const frac = enemy.shield.hp / enemy.shield.max;
+    const sr = r * 1.4;
+    if (frac > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      const g = ctx.createRadialGradient(x, y, sr * 0.6, x, y, sr);
+      g.addColorStop(0, `rgba(126,200,255,${0.05 * frac})`);
+      g.addColorStop(1, `rgba(126,200,255,${0.35 * frac})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, sr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(200,240,255,${0.35 + frac * 0.4})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const a = time * 0.8 + (k / 6) * Math.PI * 2;
+        ctx.lineTo(x + Math.cos(a) * sr, y + Math.sin(a) * sr);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(x - sr * 0.4, y - sr * 0.45, sr * 0.25, sr * 0.12, -0.6, 0, Math.PI * 2);
+      ctx.fill();
+      if (frac < 0.5) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.8 - frac})`;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(x + sr * 0.2, y - sr * 0.9);
+        ctx.lineTo(x + sr * 0.45, y - sr * 0.4);
+        ctx.lineTo(x + sr * 0.25, y - sr * 0.1);
+        ctx.moveTo(x - sr * 0.6, y + sr * 0.3);
+        ctx.lineTo(x - sr * 0.3, y + sr * 0.5);
+        ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (enemy.shield.sinceHit >= 3) {
+      // Down but about to come back: a faint flicker.
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = `rgba(126,200,255,${0.2 + Math.sin(time * 25) * 0.15})`;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 4]);
+      ctx.beginPath();
+      ctx.arc(x, y, sr, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+  // Enraged: pulsing red aura with jagged rays.
+  if (enemy.enraged) {
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(ctx, x, y, r * 1.8, `rgba(255,60,40,${0.3 + Math.sin(time * 12) * 0.12})`);
+    ctx.strokeStyle = 'rgba(255,90,60,0.8)';
+    ctx.lineWidth = 1.2;
+    for (let k = 0; k < 6; k++) {
+      const a = time * 2 + (k / 6) * Math.PI * 2;
+      const len = r * (1.5 + Math.sin(time * 15 + k) * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * r * 1.1, y + Math.sin(a) * r * 1.1);
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
 function drawBossBar(ctx, game) {
   const boss = game.boss;
   if (!boss) return;
@@ -6944,15 +7300,35 @@ function drawBossBar(ctx, game) {
   ctx.fillRect(x - 2, y - 2, w + 4, 16);
   ctx.fillStyle = '#4a1010';
   ctx.fillRect(x, y, w, 12);
-  ctx.fillStyle = frac > 0.5 ? '#d64545' : '#ff7a45';
+  ctx.fillStyle = boss.enraged ? '#ff3b2f' : frac > 0.5 ? '#d64545' : '#ff7a45';
   ctx.fillRect(x, y, w * frac, 12);
+  // Phase markers for summons and rage thresholds.
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  if (type.summons) ctx.fillRect(x + w * type.summons.at - 0.5, y, 1, 12);
+  if (type.enrage) ctx.fillRect(x + w * 0.3 - 0.5, y, 1, 12);
+  if (boss.shield) {
+    const sf = boss.shield.hp / boss.shield.max;
+    ctx.fillStyle = 'rgba(30,60,90,0.9)';
+    ctx.fillRect(x, y - 6, w, 4);
+    ctx.fillStyle = '#7ec8ff';
+    ctx.fillRect(x, y - 6, w * sf, 4);
+  }
   ctx.font = 'bold 12px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#fff';
   ctx.strokeStyle = 'rgba(0,0,0,0.8)';
   ctx.lineWidth = 3;
-  ctx.strokeText(type.name, game.level.width / 2, y + 10);
-  ctx.fillText(type.name, game.level.width / 2, y + 10);
+  const title = boss.enraged ? `${type.name} — ENRAGED` : type.name;
+  ctx.strokeText(title, game.level.width / 2, y + 10);
+  ctx.fillText(title, game.level.width / 2, y + 10);
+  const traits = describeTraits(type).join('  ·  ');
+  if (traits) {
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = '#ffd98a';
+    ctx.lineWidth = 2.5;
+    ctx.strokeText(traits, game.level.width / 2, y + 26);
+    ctx.fillText(traits, game.level.width / 2, y + 26);
+  }
 }
 
 function drawBanner(ctx, effects, level) {
@@ -7229,7 +7605,12 @@ function updateHud() {
     statusEl.textContent = 'Defeat! The enemies broke through.';
   } else if (game.phase === PHASE.WAVE) {
     const boss = game.boss;
-    statusEl.textContent = boss ? `${game.enemyTypes[boss.typeId].name} approaches!` : `Wave ${game.waveIndex + 1} incoming...`;
+    if (boss) {
+      const traits = describeTraits(game.enemyTypes[boss.typeId]);
+      statusEl.textContent = `${game.enemyTypes[boss.typeId].name} approaches!${traits.length ? ` (${traits.join(', ')})` : ''}`;
+    } else {
+      statusEl.textContent = `Wave ${game.waveIndex + 1} incoming...`;
+    }
   } else if (spotSelected && !tower) {
     statusEl.textContent = 'Choose a tower to build.';
   } else if (tower) {

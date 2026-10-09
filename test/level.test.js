@@ -1,6 +1,7 @@
 // End-to-end checks against the real level data: every level is coherent,
-// every build spot is useful, and every level is winnable by a sensible
-// mixed strategy — while no single tower type carries the whole campaign.
+// every build spot is useful, every level is winnable by a sensible,
+// counter-aware build, bosses cost lives, and no single tower type carries
+// the whole campaign.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -140,9 +141,12 @@ test('a leak can still finish the game when lives run out', () => {
 
 // --- Balance ------------------------------------------------------------------
 
+// A player who builds counters (fire on the frozen, frost on the burning,
+// lightning on shields and golems, poison on storm wisps) must beat every
+// level with lives to spare.
 for (const level of LEVELS) {
-  test(`${level.name} is winnable with a mixed tower strategy`, () => {
-    const result = playLevel(level, { strategy: 'mixed' });
+  test(`${level.name} is winnable by an element-aware build`, () => {
+    const result = playLevel(level, { strategy: 'elemental' });
     assert.equal(
       result.phase,
       PHASE.WON,
@@ -153,18 +157,45 @@ for (const level of LEVELS) {
   });
 }
 
-for (const level of LEVELS) {
-  test(`${level.name} is winnable with a Kingdom Rush + Radiant Defense hybrid`, () => {
-    const result = playLevel(level, { strategy: 'hybrid' });
-    assert.equal(
-      result.phase,
-      PHASE.WON,
-      `expected a win, got "${result.phase}" after ${result.wavesCleared}/${level.waves.length} waves ` +
-        `(lives lost per wave: ${result.livesLostPerWave.join(',')}; towers: ${result.towers.join(',')})`,
-    );
-    assert.ok(result.lives >= 3, `${level.name}: hybrid won with only ${result.lives} lives — too tight`);
+// The classic Kingdom Rush mix (archers, mages, cannons) still carries the
+// opening level; later levels demand counters.
+test('Greenfields is winnable with a classic mixed tower strategy', () => {
+  const result = playLevel(LEVELS[0], { strategy: 'mixed' });
+  assert.equal(result.phase, PHASE.WON, `lives lost per wave: ${result.livesLostPerWave.join(',')}`);
+  assert.ok(result.lives >= 3);
+});
+
+// Bosses must bite: a strong counter build still loses lives on most finals.
+test('final waves cost even a counter-aware defense lives on most levels', () => {
+  const costly = LEVELS.filter((level) => {
+    const result = playLevel(level, { strategy: 'elemental' });
+    return result.livesLostPerWave[level.waves.length - 1] > 0;
   });
-}
+  assert.ok(costly.length >= 3, `only ${costly.length} bosses cost lives`);
+});
+
+test('every boss has traits, phases, and summons from its own level', () => {
+  for (const level of LEVELS) {
+    const roster = new Set(level.waves.flatMap((w) => w.entries.map((e) => e.type)));
+    const bossType = [...roster].map((id) => ENEMY_TYPES[id]).find((t) => t.boss);
+    assert.ok(bossType.summons && roster.has(bossType.summons.type), `${bossType.name} summons from its own level`);
+    assert.ok(bossType.summons.at > 0 && bossType.summons.at < 1);
+    assert.ok(bossType.regen || bossType.shield || bossType.enrage, `${bossType.name} has a trait`);
+    assert.ok(bossType.weakTo, `${bossType.name} has an exploitable weakness`);
+  }
+});
+
+test('elemental immunities and weaknesses are consistent with the enemy element', () => {
+  const ownStatus = { fire: 'burn', ice: 'slow', poison: 'poison' };
+  for (const enemy of Object.values(ENEMY_TYPES)) {
+    if (enemy.immune) for (const st of enemy.immune) assert.ok(['burn', 'slow', 'poison'].includes(st), `${enemy.id} immune ${st}`);
+    if (enemy.element && ownStatus[enemy.element]) assert.ok((enemy.immune || []).includes(ownStatus[enemy.element]), `${enemy.id} should be immune to its own element's status`);
+    if (enemy.weakTo) {
+      assert.ok(Object.values(TOWER_TYPES).some((t) => t.element === enemy.weakTo), `${enemy.id} weak to an element no tower has`);
+      assert.notEqual(enemy.weakTo, enemy.element, `${enemy.id} weak to its own element`);
+    }
+  }
+});
 
 test('no single tower type wins every level (armor, resistance, and mechanics matter)', () => {
   for (const strategy of ['archersOnly', 'magesOnly', 'cannonsOnly', 'mortarsOnly', 'snipersOnly', 'frostOnly', 'teslaOnly', 'flameOnly', 'venomOnly', 'laserOnly', 'beaconsOnly']) {

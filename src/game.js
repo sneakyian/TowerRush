@@ -12,10 +12,41 @@ export const PHASE = {
 
 // Physical damage is cut by armor, magic damage by magic resistance.
 export function effectiveDamage(amount, damageType, enemyType, armorPierce = 0) {
+  if (damageType === 'true') return amount; // ignores armor and resistance
   const reduction = damageType === 'magic'
     ? enemyType.magicResist || 0
     : (enemyType.armor || 0) * (1 - armorPierce);
   return amount * (1 - reduction);
+}
+
+// Elemental traits. An enemy `weakTo` an element takes WEAKNESS_MULTIPLIER
+// from towers of that element, ignoring its armor and magic resistance;
+// `immune` lists the status effects it shrugs off. Energy shields absorb hits before health: magic tears through them,
+// physical barely scratches them, and no burn or poison lands while one is up.
+export const WEAKNESS_MULTIPLIER = 1.75;
+export const SHIELD_DAMAGE = { magic: 1.5, physical: 0.75, true: 1 };
+export const SHIELD_RECHARGE_DELAY = 4; // seconds without a hit before recharging
+export const SHIELD_RECHARGE_RATE = 0.25; // fraction of max shield per second
+// Thermal shock: fire on a chilled enemy (or frost on a burning one) shatters
+// both effects for a burst of true damage.
+export const SHATTER_FRACTION = 0.08;
+export const SHATTER_CAP = { normal: 150, boss: 220 };
+export const ENRAGE_THRESHOLD = 0.3;
+export const ENRAGE_SPEED = 1.5;
+export const ENRAGE_ARMOR = 0.1;
+
+// Short, player-facing summary of an enemy type's traits.
+export function describeTraits(type) {
+  const out = [];
+  if (type.armor >= 0.3) out.push('Armored');
+  if (type.magicResist >= 0.5) out.push('Spell-warded');
+  if (type.regen) out.push('Regenerates');
+  if (type.shield) out.push('Shielded');
+  if (type.element) out.push(`${type.element[0].toUpperCase()}${type.element.slice(1)}`);
+  if (type.weakTo) out.push(`Weak to ${type.weakTo}`);
+  if (type.summons) out.push('Summons');
+  if (type.enrage) out.push('Enrages');
+  return out;
 }
 
 export class Game {
@@ -169,29 +200,45 @@ export class Game {
   spawnEnemies() {
     while (this.spawnQueue.length > 0 && this.spawnQueue[0].at <= this.waveTime) {
       const { typeId } = this.spawnQueue.shift();
-      const type = this.enemyTypes[typeId];
-      this.enemies.push({
-        id: this.nextEnemyId++,
-        typeId,
-        hp: type.hp,
-        maxHp: type.hp,
-        speed: type.speed,
-        bounty: type.bounty,
-        radius: type.radius,
-        boss: !!type.boss,
-        livesCost: type.lives || 1,
-        dist: 0,
-        alive: true,
-        flash: 0, // seconds of white hit-flash left, for rendering
-        slow: null, // { factor, remaining } while chilled
-        burn: null, // { dps, remaining, damageType } while burning
-        poison: null, // { stacks, dpsPerStack, remaining } while poisoned
-        age: 0, // seconds since spawning, for the renderer
-      });
-      const pos = this.path.positionAt(0);
-      this.pushEvent({ type: 'enemy-spawned', x: pos.x, y: pos.y, enemyType: typeId });
-      if (type.boss) this.pushEvent({ type: 'boss-spawned', name: type.name, enemyType: typeId });
+      this.spawnEnemy(typeId, 0);
     }
+  }
+
+  // Put one enemy on the path at `dist`. Used by the wave spawner and by
+  // bosses that call reinforcements.
+  spawnEnemy(typeId, dist = 0) {
+    const type = this.enemyTypes[typeId];
+    const enemy = {
+      id: this.nextEnemyId++,
+      typeId,
+      hp: type.hp,
+      maxHp: type.hp,
+      speed: type.speed,
+      bounty: type.bounty,
+      radius: type.radius,
+      boss: !!type.boss,
+      livesCost: type.lives || 1,
+      dist,
+      alive: true,
+      flash: 0, // seconds of white hit-flash left, for rendering
+      slow: null, // { factor, remaining } while chilled
+      burn: null, // { dps, remaining, damageType, element } while burning
+      poison: null, // { stacks, dpsPerStack, remaining } while poisoned
+      age: 0, // seconds since spawning, for the renderer
+      // Traits.
+      regen: type.regen || 0, // hp per second, suppressed while burning or poisoned
+      shield: type.shield ? { hp: type.shield, max: type.shield, sinceHit: 0 } : null,
+      element: type.element || null,
+      immune: type.immune || [],
+      weakTo: type.weakTo || null,
+      enraged: false,
+      summoned: false,
+    };
+    this.enemies.push(enemy);
+    const pos = this.path.positionAt(dist);
+    this.pushEvent({ type: 'enemy-spawned', x: pos.x, y: pos.y, enemyType: typeId });
+    if (type.boss) this.pushEvent({ type: 'boss-spawned', name: type.name, enemyType: typeId, traits: describeTraits(type) });
+    return enemy;
   }
 
   moveEnemies(dt) {
@@ -204,16 +251,32 @@ export class Game {
         if (enemy.slow.remaining <= 0) enemy.slow = null;
       }
       if (enemy.burn) {
-        this.damageEnemy(enemy, enemy.burn.dps * dt, enemy.burn.damageType, { flash: false });
+        this.damageEnemy(enemy, enemy.burn.dps * dt, enemy.burn.damageType, { flash: false, element: enemy.burn.element });
         enemy.burn.remaining -= dt;
         if (enemy.burn.remaining <= 0) enemy.burn = null;
         if (!enemy.alive) continue;
       }
       if (enemy.poison) {
-        this.damageEnemy(enemy, enemy.poison.dpsPerStack * enemy.poison.stacks * dt, 'magic', { flash: false });
+        this.damageEnemy(enemy, enemy.poison.dpsPerStack * enemy.poison.stacks * dt, 'magic', { flash: false, element: 'poison' });
         enemy.poison.remaining -= dt;
         if (enemy.poison.remaining <= 0) enemy.poison = null;
         if (!enemy.alive) continue;
+      }
+      // Regeneration, unless a damage-over-time effect is eating at it.
+      if (enemy.regen > 0 && !enemy.burn && !enemy.poison && enemy.hp < enemy.maxHp) {
+        enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.regen * dt);
+      }
+      // Shields recharge once they have been left alone for a moment.
+      if (enemy.shield) {
+        enemy.shield.sinceHit += dt;
+        if (enemy.shield.hp < enemy.shield.max && enemy.shield.sinceHit >= SHIELD_RECHARGE_DELAY) {
+          const wasDown = enemy.shield.hp <= 0;
+          enemy.shield.hp = Math.min(enemy.shield.max, enemy.shield.hp + enemy.shield.max * SHIELD_RECHARGE_RATE * dt);
+          if (wasDown) {
+            const pos = this.path.positionAt(enemy.dist);
+            this.pushEvent({ type: 'shield-restored', x: pos.x, y: pos.y, enemyType: enemy.typeId });
+          }
+        }
       }
       enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
       if (enemy.dist >= this.path.totalLength) {
@@ -292,14 +355,15 @@ export class Game {
           slow: stats.slow || null,
           poison: stats.poison || null,
           color: type.color,
+          element: type.element || null,
           towerType: tower.typeId,
           towerLevel: tower.level,
           dirX: 0,
           dirY: 0,
         });
       } else if (attack === 'instant') {
-        this.damageEnemy(target, stats.damage * boost, type.damageType);
-        if (stats.burn) this.applyBurn(target, { dps: stats.burn.dps * boost, duration: stats.burn.duration }, type.damageType);
+        this.damageEnemy(target, stats.damage * boost, type.damageType, { element: type.element });
+        if (stats.burn) this.applyBurn(target, { dps: stats.burn.dps * boost, duration: stats.burn.duration }, type.damageType, type.element);
         this.pushEvent({ type: 'hit', x: pos.x, y: pos.y, towerType: tower.typeId, level: tower.level, splash: 0 });
       } else if (attack === 'chain') {
         this.chainLightning(spot, target, stats, type, tower, boost);
@@ -318,7 +382,7 @@ export class Game {
       const pos = this.path.positionAt(current.dist);
       points.push(pos);
       struck.add(current.id);
-      this.damageEnemy(current, damage, type.damageType);
+      this.damageEnemy(current, damage, type.damageType, { element: type.element });
       damage *= stats.falloff;
       let next = null;
       let best = Infinity;
@@ -355,7 +419,7 @@ export class Game {
     const multiplier = 1 + (stats.rampMultiplier - 1) * ramp;
     const pos = this.path.positionAt(target.dist);
     tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
-    this.damageEnemy(target, stats.dps * multiplier * boost * dt, type.damageType, { flash: false });
+    this.damageEnemy(target, stats.dps * multiplier * boost * dt, type.damageType, { flash: false, element: type.element });
   }
 
   // Current damage multiplier of a beam tower, for the HUD and renderer.
@@ -366,6 +430,8 @@ export class Game {
   }
 
   applySlow(enemy, slow) {
+    if (!this.canAfflict(enemy, 'slow')) return;
+    if (enemy.burn) return this.shatter(enemy);
     // A stronger or fresher chill replaces a weaker one; never stacks.
     if (!enemy.slow || slow.factor <= enemy.slow.factor) {
       enemy.slow = { factor: slow.factor, remaining: slow.duration };
@@ -375,6 +441,7 @@ export class Game {
   }
 
   applyPoison(enemy, poison) {
+    if (!this.canAfflict(enemy, 'poison')) return;
     if (!enemy.poison) {
       enemy.poison = { stacks: 1, dpsPerStack: poison.dpsPerStack, remaining: poison.duration };
     } else {
@@ -384,9 +451,11 @@ export class Game {
     }
   }
 
-  applyBurn(enemy, burn, damageType) {
+  applyBurn(enemy, burn, damageType, element = 'fire') {
+    if (!this.canAfflict(enemy, 'burn')) return;
+    if (enemy.slow) return this.shatter(enemy);
     if (!enemy.burn || burn.dps >= enemy.burn.dps) {
-      enemy.burn = { dps: burn.dps, remaining: burn.duration, damageType };
+      enemy.burn = { dps: burn.dps, remaining: burn.duration, damageType, element };
     } else {
       enemy.burn.remaining = Math.max(enemy.burn.remaining, burn.duration);
     }
@@ -455,23 +524,38 @@ export class Game {
         if (!enemy.alive) continue;
         const pos = this.path.positionAt(enemy.dist);
         if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
-          this.damageEnemy(enemy, proj.damage, proj.damageType, { armorPierce: proj.armorPierce });
+          this.damageEnemy(enemy, proj.damage, proj.damageType, { armorPierce: proj.armorPierce, element: proj.element });
           if (proj.slow) this.applySlow(enemy, proj.slow);
           if (proj.poison) this.applyPoison(enemy, proj.poison);
         }
       }
     } else if (directTarget) {
-      this.damageEnemy(directTarget, proj.damage, proj.damageType, { armorPierce: proj.armorPierce });
+      this.damageEnemy(directTarget, proj.damage, proj.damageType, { armorPierce: proj.armorPierce, element: proj.element });
       if (proj.slow) this.applySlow(directTarget, proj.slow);
       if (proj.poison) this.applyPoison(directTarget, proj.poison);
     }
   }
 
-  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0 } = {}) {
+  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0, element = null } = {}) {
     if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
-    enemy.hp -= effectiveDamage(amount, damageType, type, armorPierce);
+    const weak = element && enemy.weakTo === element ? WEAKNESS_MULTIPLIER : 1;
     if (flash) enemy.flash = 0.12;
+    // An energy shield takes the hit instead of the body.
+    if (enemy.shield && enemy.shield.hp > 0) {
+      enemy.shield.sinceHit = 0;
+      enemy.shield.hp -= amount * (SHIELD_DAMAGE[damageType] ?? 1) * weak;
+      if (enemy.shield.hp <= 0) {
+        enemy.shield.hp = 0;
+        const pos = this.path.positionAt(enemy.dist);
+        this.pushEvent({ type: 'shield-broken', x: pos.x, y: pos.y, enemyType: enemy.typeId, boss: enemy.boss });
+      }
+      return;
+    }
+    const stats = enemy.enraged ? { ...type, armor: (type.armor || 0) + ENRAGE_ARMOR } : type;
+    // A weakness cuts straight through armor and wards as well as hitting harder.
+    enemy.hp -= weak > 1 ? amount * weak : effectiveDamage(amount, damageType, stats, armorPierce);
+    if (enemy.alive && enemy.hp > 0) this.checkBossPhases(enemy, type);
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;
@@ -485,6 +569,43 @@ export class Game {
         boss: enemy.boss,
       });
     }
+  }
+
+  // Bosses hit back as they weaken: a summoning call at one threshold and a
+  // rage below another.
+  checkBossPhases(enemy, type) {
+    const frac = enemy.hp / enemy.maxHp;
+    if (type.summons && !enemy.summoned && frac <= type.summons.at) {
+      enemy.summoned = true;
+      for (let i = 0; i < type.summons.count; i++) {
+        this.spawnEnemy(type.summons.type, Math.max(0, enemy.dist - 14 - i * 12));
+      }
+      const pos = this.path.positionAt(enemy.dist);
+      this.pushEvent({ type: 'boss-summons', x: pos.x, y: pos.y, name: type.name, count: type.summons.count, enemyType: type.summons.type });
+    }
+    if (type.enrage && !enemy.enraged && frac <= ENRAGE_THRESHOLD) {
+      enemy.enraged = true;
+      enemy.speed = type.speed * ENRAGE_SPEED;
+      const pos = this.path.positionAt(enemy.dist);
+      this.pushEvent({ type: 'boss-enraged', x: pos.x, y: pos.y, name: type.name });
+    }
+  }
+
+  // Can this status land? Shields keep burn and poison off the body (chill
+  // still bites through); elements grant outright immunities.
+  canAfflict(enemy, status) {
+    if (status !== 'slow' && enemy.shield && enemy.shield.hp > 0) return false;
+    return !(enemy.immune || []).includes(status);
+  }
+
+  // Fire meets ice: both effects are consumed in a burst of true damage.
+  shatter(enemy) {
+    const burst = Math.min(enemy.maxHp * SHATTER_FRACTION, enemy.boss ? SHATTER_CAP.boss : SHATTER_CAP.normal);
+    enemy.slow = null;
+    enemy.burn = null;
+    const pos = this.path.positionAt(enemy.dist);
+    this.pushEvent({ type: 'shatter', x: pos.x, y: pos.y, damage: Math.round(burst), enemyType: enemy.typeId });
+    this.damageEnemy(enemy, burst, 'true');
   }
 
   cleanupAndCheckEnd() {
