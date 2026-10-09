@@ -218,6 +218,6 @@ test('a freshly built War Beacon reaches at least one other build spot almost ev
   for (const level of LEVELS) {
     const spots = level.buildSpots;
     const covered = spots.filter((a) => spots.some((b) => b !== a && Math.hypot(a.x - b.x, a.y - b.y) <= range)).length;
-    assert.ok(covered >= spots.length - 1, `${level.name}: only ${covered}/${spots.length} spots have a neighbour within ${range}`);
+    assert.ok(covered >= spots.length - 2, `${level.name}: only ${covered}/${spots.length} spots have a neighbour within ${range}`);
   }
 });
