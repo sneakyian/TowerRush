@@ -70,6 +70,22 @@ const waveEl = document.getElementById('wave');
 const statusEl = document.getElementById('status');
 const towerInfoEl = document.getElementById('tower-info');
 const startWaveBtn = document.getElementById('start-wave');
+const speedBtn = document.getElementById('speed');
+
+// Fast-forward: the simulation and effects run 1, 2 or 3 steps per frame.
+const SPEEDS = [1, 2, 3];
+let speed = 1;
+function setSpeed(value) {
+  speed = SPEEDS.includes(value) ? value : 1;
+  speedBtn.textContent = `Speed ${speed}×`;
+  speedBtn.classList.toggle('active', speed > 1);
+}
+speedBtn.addEventListener('click', () => setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length]));
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;
+  if (e.key === 'f' || e.key === 'F') { speedBtn.click(); e.preventDefault(); }
+  else if (e.key === '1' || e.key === '2' || e.key === '3') setSpeed(Number(e.key));
+});
 const nextLevelBtn = document.getElementById('next-level');
 const restartBtn = document.getElementById('restart');
 const chooseLevelBtn = document.getElementById('choose-level');
@@ -254,14 +270,17 @@ function frame(now) {
   const phaseBefore = game.phase;
   const goldBefore = game.gold;
   const livesBefore = game.lives;
-  game.update(dt);
+  // Fast-forward runs extra fixed steps rather than one big one, so towers,
+  // projectiles and status effects behave identically at every speed.
+  for (let step = 0; step < speed; step++) {
+    game.update(dt);
+    effects.process(game.drainEvents());
+    effects.ambient(game, dt);
+    effects.update(dt);
+  }
   if (game.phase !== phaseBefore || game.gold !== goldBefore || game.lives !== livesBefore) {
     updateHud();
   }
-
-  effects.process(game.drainEvents());
-  effects.ambient(game, dt);
-  effects.update(dt);
   render(ctx, game, effects, ui, now / 1000);
   requestAnimationFrame(frame);
 }

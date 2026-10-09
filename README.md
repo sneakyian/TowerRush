@@ -24,7 +24,8 @@ from the sources with `npm run build`.)
 - Click a **round build spot** next to the path, then pick a tower.
 - Click a built tower to **upgrade** it (four tiers) or **sell** it for
   half of what you've invested.
-- Click **Start Wave** to send the next wave. Every enemy that reaches the
+- Click **Start Wave** to send the next wave. **Speed** (or `F`, `1`/`2`/`3`)
+  fast-forwards the action up to 3×. Every enemy that reaches the
   castle costs 1 life, heavy brutes (orcs, yetis, trolls, golems) cost 2,
   and the **boss** on the final wave costs 5.
 
