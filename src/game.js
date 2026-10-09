@@ -1,7 +1,7 @@
 // Core game logic. No DOM or canvas access here, so it runs in Node for tests.
 
 import { Path } from './path.js';
-import { TOWER_TYPES, ENEMY_TYPES, MAX_TOWER_LEVEL } from './config.js';
+import { TOWER_TYPES, ENEMY_TYPES, MAX_TOWER_LEVEL, HERO_TYPES, HERO_MAX_LEVEL, HERO_XP_LEVELS } from './config.js';
 
 export const PHASE = {
   BUILD: 'build', // between waves; player can build and start the next wave
@@ -50,10 +50,12 @@ export function describeTraits(type) {
 }
 
 export class Game {
-  constructor(level, { towerTypes = TOWER_TYPES, enemyTypes = ENEMY_TYPES } = {}) {
+  constructor(level, { towerTypes = TOWER_TYPES, enemyTypes = ENEMY_TYPES, heroTypes = HERO_TYPES } = {}) {
     this.level = level;
     this.towerTypes = towerTypes;
     this.enemyTypes = enemyTypes;
+    this.heroTypes = heroTypes;
+    this.hero = null; // set with setHero()
     this.path = Path.fromLevel(level);
 
     this.gold = level.startingGold;
@@ -191,6 +193,7 @@ export class Game {
     if (this.phase === PHASE.WAVE) this.waveTime += dt;
 
     this.spawnEnemies();
+    this.updateHero(dt);
     this.moveEnemies(dt);
     this.updateTowers(dt);
     this.updateProjectiles(dt);
@@ -233,6 +236,8 @@ export class Game {
       weakTo: type.weakTo || null,
       enraged: false,
       summoned: false,
+      stun: 0, // seconds frozen in place by a hero ability
+      blocked: false, // held in melee by the hero this tick
     };
     this.enemies.push(enemy);
     const pos = this.path.positionAt(dist);
@@ -278,6 +283,11 @@ export class Game {
           }
         }
       }
+      if (enemy.stun > 0) {
+        enemy.stun = Math.max(0, enemy.stun - dt);
+        continue;
+      }
+      if (enemy.blocked) continue; // held in melee by the hero
       enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
@@ -536,7 +546,7 @@ export class Game {
     }
   }
 
-  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0, element = null } = {}) {
+  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0, element = null, source = null } = {}) {
     if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
     const weak = element && enemy.weakTo === element ? WEAKNESS_MULTIPLIER : 1;
@@ -559,6 +569,7 @@ export class Game {
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;
+      if (source === 'hero') this.grantHeroXp(enemy.bounty);
       const pos = this.path.positionAt(enemy.dist);
       this.pushEvent({
         type: 'enemy-died',
@@ -606,6 +617,175 @@ export class Game {
     const pos = this.path.positionAt(enemy.dist);
     this.pushEvent({ type: 'shatter', x: pos.x, y: pos.y, damage: Math.round(burst), enemyType: enemy.typeId });
     this.damageEnemy(enemy, burst, 'true');
+  }
+
+  // --- Hero -------------------------------------------------------------------
+
+  // Put the chosen hero on the field by the castle gate.
+  setHero(typeId) {
+    const type = this.heroTypes[typeId];
+    if (!type) return { ok: false, reason: 'unknown hero' };
+    const gate = this.path.positionAt(Math.max(0, this.path.totalLength - 46));
+    this.hero = {
+      typeId,
+      x: gate.x,
+      y: gate.y,
+      hp: type.hp,
+      maxHp: type.hp,
+      level: 0,
+      xp: 0,
+      alive: true,
+      targetX: null, // move order
+      targetY: null,
+      cooldown: 0,
+      abilityCooldown: 0,
+      respawn: 0,
+      facing: 1,
+      swing: 0, // seconds of attack animation left, for the renderer
+      engaged: 0, // enemies currently fighting it
+    };
+    return { ok: true };
+  }
+
+  heroStats(hero = this.hero) {
+    const type = this.heroTypes[hero.typeId];
+    const growth = 1 + hero.level * 0.25;
+    return { ...type, hp: Math.round(type.hp * growth), damage: type.damage * growth, abilityDamage: type.ability.damage * growth };
+  }
+
+  commandHero(x, y) {
+    const hero = this.hero;
+    if (!hero || !hero.alive) return { ok: false };
+    hero.targetX = Math.min(Math.max(x, 8), this.level.width - 8);
+    hero.targetY = Math.min(Math.max(y, 8), this.level.height - 8);
+    return { ok: true };
+  }
+
+  grantHeroXp(amount) {
+    const hero = this.hero;
+    if (!hero) return;
+    hero.xp += amount;
+    while (hero.level < HERO_MAX_LEVEL && hero.xp >= HERO_XP_LEVELS[hero.level]) {
+      hero.level += 1;
+      const stats = this.heroStats(hero);
+      hero.maxHp = stats.hp;
+      hero.hp = stats.hp; // levelling fully heals
+      this.pushEvent({ type: 'hero-levelup', x: hero.x, y: hero.y, level: hero.level + 1, heroType: hero.typeId });
+    }
+  }
+
+  // Enemy melee strength against the hero, per second.
+  enemyAttack(enemy) {
+    const type = this.enemyTypes[enemy.typeId];
+    return (type.attack ?? Math.max(3, Math.round(type.hp * 0.035))) * (enemy.enraged ? 1.5 : 1);
+  }
+
+  updateHero(dt) {
+    const hero = this.hero;
+    if (!hero) return;
+    for (const enemy of this.enemies) enemy.blocked = false;
+    hero.cooldown = Math.max(0, hero.cooldown - dt);
+    hero.abilityCooldown = Math.max(0, hero.abilityCooldown - dt);
+    hero.swing = Math.max(0, hero.swing - dt);
+    if (!hero.alive) {
+      hero.respawn -= dt;
+      if (hero.respawn <= 0) {
+        const gate = this.path.positionAt(Math.max(0, this.path.totalLength - 46));
+        Object.assign(hero, { alive: true, hp: hero.maxHp, x: gate.x, y: gate.y, targetX: null, targetY: null, engaged: 0 });
+        this.pushEvent({ type: 'hero-respawned', x: hero.x, y: hero.y, heroType: hero.typeId });
+      }
+      return;
+    }
+    const stats = this.heroStats(hero);
+    // Walk toward the move order.
+    if (hero.targetX !== null) {
+      const dx = hero.targetX - hero.x;
+      const dy = hero.targetY - hero.y;
+      const dist = Math.hypot(dx, dy);
+      const step = stats.speed * dt;
+      if (dist <= step) {
+        hero.x = hero.targetX;
+        hero.y = hero.targetY;
+        hero.targetX = hero.targetY = null;
+      } else {
+        hero.x += (dx / dist) * step;
+        hero.y += (dy / dist) * step;
+        if (Math.abs(dx) > 1) hero.facing = dx > 0 ? 1 : -1;
+      }
+    }
+    // Who is close enough to fight?
+    const moving = hero.targetX !== null;
+    const near = [];
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      near.push({ enemy, pos, d: Math.hypot(pos.x - hero.x, pos.y - hero.y) });
+    }
+    near.sort((a, b) => b.enemy.dist - a.enemy.dist); // furthest along first
+    // Melee heroes hold enemies that reach them (bosses shove through) and
+    // take their blows; enemies brushing past a ranged hero hit it too.
+    let engaged = 0;
+    const reach = stats.style === 'melee' ? stats.range + 6 : 20;
+    for (const n of near) {
+      if (n.d > reach + n.enemy.radius) continue;
+      if (stats.style === 'melee' && !moving && !n.enemy.boss && engaged < stats.block) n.enemy.blocked = true;
+      engaged += 1;
+      hero.hp -= this.enemyAttack(n.enemy) * (1 - (stats.armor || 0)) * dt;
+    }
+    hero.engaged = engaged;
+    if (hero.hp <= 0) {
+      hero.hp = 0;
+      hero.alive = false;
+      hero.respawn = stats.respawn;
+      for (const enemy of this.enemies) enemy.blocked = false;
+      this.pushEvent({ type: 'hero-died', x: hero.x, y: hero.y, heroType: hero.typeId, respawn: stats.respawn });
+      return;
+    }
+    // Attack.
+    if (hero.cooldown > 0 || moving) return;
+    const attackReach = stats.style === 'melee' ? reach : stats.range; // melee swings at whatever it holds
+    const inRange = near.filter((n) => n.d <= attackReach + n.enemy.radius);
+    if (!inRange.length) return;
+    const target = inRange[0];
+    hero.cooldown = stats.attackInterval;
+    hero.swing = 0.25;
+    if (Math.abs(target.pos.x - hero.x) > 1) hero.facing = target.pos.x > hero.x ? 1 : -1;
+    this.pushEvent({ type: 'hero-attack', heroType: hero.typeId, x: hero.x, y: hero.y, targetX: target.pos.x, targetY: target.pos.y });
+    const hits = stats.splash
+      ? inRange.filter((n) => Math.hypot(n.pos.x - target.pos.x, n.pos.y - target.pos.y) <= stats.splash)
+      : inRange.slice(0, stats.cleave || 1);
+    for (const n of hits) {
+      const before = n.enemy.hp;
+      this.damageEnemy(n.enemy, stats.damage, stats.damageType, { element: stats.element || null, source: 'hero' });
+      if (stats.burn) this.applyBurn(n.enemy, stats.burn, stats.damageType, stats.element);
+      if (stats.lifesteal) hero.hp = Math.min(hero.maxHp, hero.hp + Math.max(0, before - Math.max(0, n.enemy.hp)) * stats.lifesteal);
+    }
+  }
+
+  // The hero's special, centred on the hero.
+  useHeroAbility() {
+    const hero = this.hero;
+    if (!hero || !hero.alive) return { ok: false, reason: 'no hero' };
+    if (hero.abilityCooldown > 0) return { ok: false, reason: 'cooling down' };
+    const stats = this.heroStats(hero);
+    const ability = stats.ability;
+    hero.abilityCooldown = ability.cooldown;
+    hero.swing = 0.4;
+    let struck = 0;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      if (Math.hypot(pos.x - hero.x, pos.y - hero.y) > ability.radius + enemy.radius) continue;
+      struck += 1;
+      this.damageEnemy(enemy, stats.abilityDamage, ability.damageType || stats.damageType, { element: ability.element || null, source: 'hero' });
+      if (!enemy.alive) continue;
+      if (ability.burn) this.applyBurn(enemy, ability.burn, stats.damageType, ability.element);
+      if (ability.slow) this.applySlow(enemy, ability.slow);
+      if (ability.stun) enemy.stun = Math.max(enemy.stun, enemy.boss ? ability.stun * 0.5 : ability.stun);
+    }
+    if (ability.heal) hero.hp = Math.min(hero.maxHp, hero.hp + hero.maxHp * ability.heal);
+    this.pushEvent({ type: 'hero-ability', heroType: hero.typeId, name: ability.name, x: hero.x, y: hero.y, radius: ability.radius, struck });
+    return { ok: true, struck };
   }
 
   cleanupAndCheckEnd() {

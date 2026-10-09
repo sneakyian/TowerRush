@@ -122,6 +122,19 @@
     #upgrade-tower { background: linear-gradient(180deg, #b7d99f, #8fb273); color: #1b1f2a; font-weight: 600; }
     #tower-info { font-size: 0.9rem; opacity: 0.85; min-height: 1.2em; }
     #status { min-height: 1.4em; font-style: italic; opacity: 0.8; }
+    #hero-list { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+    .hero-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 118px; padding: 8px 6px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.14); color: #eceff4; text-align: center; }
+    .hero-btn:hover { background: rgba(143,211,255,0.2); }
+    .hero-btn.selected { border-color: var(--hero, #ffd166); box-shadow: 0 0 14px var(--hero, #ffd166); background: rgba(255,255,255,0.14); }
+    .hero-btn .hero-icon { font-size: 1.6rem; }
+    .hero-btn strong { font-size: 0.85rem; }
+    .hero-btn small { opacity: 0.75; font-size: 0.7rem; line-height: 1.2; }
+    #hero-panel { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; font-size: 0.95rem; }
+    #hero-portrait { font-size: 1.4rem; }
+    #hero-hp { display: inline-block; width: 120px; height: 10px; border-radius: 5px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.2); overflow: hidden; vertical-align: middle; }
+    #hero-hp-fill { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #8fb273, #5f8f4a); transition: width 0.15s; }
+    #hero-ability { background: linear-gradient(180deg, #ffd98a, #e2b84a); color: #1b1f2a; font-weight: 600; min-width: 150px; }
+    #hero-ability:disabled { background: var(--border); color: var(--muted); }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -136,6 +149,8 @@
   <div id="stage">
     <canvas id="game" width="800" height="480"></canvas>
     <div id="level-select">
+      <h2>Choose your hero</h2>
+      <div id="hero-list"></div>
       <h2>Choose a level</h2>
       <div id="level-list"></div>
     </div>
@@ -150,6 +165,13 @@
     <button id="next-level" hidden>Next Level</button>
     <button id="restart" hidden>Play Again</button>
     <button id="choose-level">Levels</button>
+  </div>
+  <div id="hero-panel" hidden>
+    <span id="hero-portrait"></span>
+    <span id="hero-name"></span>
+    <span id="hero-hp"><span id="hero-hp-fill"></span></span>
+    <span id="hero-level"></span>
+    <button id="hero-ability">Ability</button>
   </div>
   <div id="tower-info"></div>
   <div id="status"></div>
@@ -520,6 +542,49 @@ const ENEMY_TYPES = {
     look: { body: 'big', features: ['wings', 'horns', 'spikes', 'flame', 'crown'] },
     shield: 900, element: 'fire', immune: ['burn'], weakTo: 'ice', regen: 20, enrage: true,
     summons: { at: 0.5, type: 'fireImp', count: 10 },
+  },
+};
+
+// --- Heroes ----------------------------------------------------------------------
+// One hero joins each level. Click the hero, then click the map to move.
+//   style    'melee' heroes block up to `block` enemies that reach them;
+//            'ranged' heroes shoot from `range` and never block.
+//   ability  triggered by the player, centred on the hero, on a cooldown.
+// Per-level growth: +25% hp and damage per hero level (max HERO_MAX_LEVEL).
+const HERO_MAX_LEVEL = 3;
+const HERO_XP_LEVELS = [80, 240, 520]; // bounty earned from hero kills
+const HERO_TYPES = {
+  dragon: {
+    id: 'dragon', name: 'Ember Drake', title: 'Flying fire-breather',
+    desc: 'Hovers above the fight, breathing fire that splashes and burns.',
+    color: '#ff6b35', style: 'ranged', hp: 260, speed: 120, range: 110, damage: 18, damageType: 'physical',
+    element: 'fire', attackInterval: 0.6, splash: 28, burn: { dps: 8, duration: 2.5 }, respawn: 16,
+    ability: { name: 'Firestorm', key: 'Q', cooldown: 24, radius: 105, damage: 110, element: 'fire', burn: { dps: 14, duration: 4 },
+      desc: 'Rains fire on everything around the drake.' },
+  },
+  knight: {
+    id: 'knight', name: 'Sir Aldric', title: 'Armoured knight',
+    desc: 'Holds the line: blocks up to three enemies and cleaves them with his greatsword.',
+    color: '#4a6fa5', style: 'melee', hp: 520, speed: 85, range: 26, damage: 26, damageType: 'physical',
+    attackInterval: 0.8, block: 3, cleave: 2, armor: 0.3, respawn: 14,
+    ability: { name: 'Whirlwind', key: 'Q', cooldown: 20, radius: 62, damage: 80, stun: 1.6,
+      desc: 'Spins through everything around him, stunning what survives.' },
+  },
+  mage: {
+    id: 'mage', name: 'Ilyria', title: 'Archmage of frost',
+    desc: 'Hurls arcane bolts from range; her Frost Nova freezes a crowd in place.',
+    color: '#8f7bff', style: 'ranged', hp: 220, speed: 90, range: 120, damage: 30, damageType: 'magic',
+    element: 'arcane', attackInterval: 0.9, respawn: 16,
+    ability: { name: 'Frost Nova', key: 'Q', cooldown: 22, radius: 135, damage: 45, element: 'ice', slow: { factor: 0.3, duration: 4.5 },
+      desc: 'Chills every enemy around her to a crawl.' },
+  },
+  paladin: {
+    id: 'paladin', name: 'Mordrek', title: 'Skeleton paladin',
+    desc: 'An undead champion who blocks the road and drinks the life he takes.',
+    color: '#8fd33a', style: 'melee', hp: 420, speed: 80, range: 26, damage: 22, damageType: 'physical',
+    attackInterval: 0.7, block: 2, lifesteal: 0.35, armor: 0.2, respawn: 10,
+    ability: { name: 'Consecration', key: 'Q', cooldown: 24, radius: 100, damage: 70, damageType: 'true', stun: 2, heal: 0.4,
+      desc: 'Holy ground scorches and stuns nearby foes and mends his bones.' },
   },
 };
 
@@ -904,10 +969,12 @@ function describeTraits(type) {
 }
 
 class Game {
-  constructor(level, { towerTypes = TOWER_TYPES, enemyTypes = ENEMY_TYPES } = {}) {
+  constructor(level, { towerTypes = TOWER_TYPES, enemyTypes = ENEMY_TYPES, heroTypes = HERO_TYPES } = {}) {
     this.level = level;
     this.towerTypes = towerTypes;
     this.enemyTypes = enemyTypes;
+    this.heroTypes = heroTypes;
+    this.hero = null; // set with setHero()
     this.path = Path.fromLevel(level);
 
     this.gold = level.startingGold;
@@ -1045,6 +1112,7 @@ class Game {
     if (this.phase === PHASE.WAVE) this.waveTime += dt;
 
     this.spawnEnemies();
+    this.updateHero(dt);
     this.moveEnemies(dt);
     this.updateTowers(dt);
     this.updateProjectiles(dt);
@@ -1087,6 +1155,8 @@ class Game {
       weakTo: type.weakTo || null,
       enraged: false,
       summoned: false,
+      stun: 0, // seconds frozen in place by a hero ability
+      blocked: false, // held in melee by the hero this tick
     };
     this.enemies.push(enemy);
     const pos = this.path.positionAt(dist);
@@ -1132,6 +1202,11 @@ class Game {
           }
         }
       }
+      if (enemy.stun > 0) {
+        enemy.stun = Math.max(0, enemy.stun - dt);
+        continue;
+      }
+      if (enemy.blocked) continue; // held in melee by the hero
       enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
@@ -1390,7 +1465,7 @@ class Game {
     }
   }
 
-  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0, element = null } = {}) {
+  damageEnemy(enemy, amount, damageType = 'physical', { flash = true, armorPierce = 0, element = null, source = null } = {}) {
     if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
     const weak = element && enemy.weakTo === element ? WEAKNESS_MULTIPLIER : 1;
@@ -1413,6 +1488,7 @@ class Game {
     if (enemy.hp <= 0 && enemy.alive) {
       enemy.alive = false;
       this.gold += enemy.bounty;
+      if (source === 'hero') this.grantHeroXp(enemy.bounty);
       const pos = this.path.positionAt(enemy.dist);
       this.pushEvent({
         type: 'enemy-died',
@@ -1460,6 +1536,175 @@ class Game {
     const pos = this.path.positionAt(enemy.dist);
     this.pushEvent({ type: 'shatter', x: pos.x, y: pos.y, damage: Math.round(burst), enemyType: enemy.typeId });
     this.damageEnemy(enemy, burst, 'true');
+  }
+
+  // --- Hero -------------------------------------------------------------------
+
+  // Put the chosen hero on the field by the castle gate.
+  setHero(typeId) {
+    const type = this.heroTypes[typeId];
+    if (!type) return { ok: false, reason: 'unknown hero' };
+    const gate = this.path.positionAt(Math.max(0, this.path.totalLength - 46));
+    this.hero = {
+      typeId,
+      x: gate.x,
+      y: gate.y,
+      hp: type.hp,
+      maxHp: type.hp,
+      level: 0,
+      xp: 0,
+      alive: true,
+      targetX: null, // move order
+      targetY: null,
+      cooldown: 0,
+      abilityCooldown: 0,
+      respawn: 0,
+      facing: 1,
+      swing: 0, // seconds of attack animation left, for the renderer
+      engaged: 0, // enemies currently fighting it
+    };
+    return { ok: true };
+  }
+
+  heroStats(hero = this.hero) {
+    const type = this.heroTypes[hero.typeId];
+    const growth = 1 + hero.level * 0.25;
+    return { ...type, hp: Math.round(type.hp * growth), damage: type.damage * growth, abilityDamage: type.ability.damage * growth };
+  }
+
+  commandHero(x, y) {
+    const hero = this.hero;
+    if (!hero || !hero.alive) return { ok: false };
+    hero.targetX = Math.min(Math.max(x, 8), this.level.width - 8);
+    hero.targetY = Math.min(Math.max(y, 8), this.level.height - 8);
+    return { ok: true };
+  }
+
+  grantHeroXp(amount) {
+    const hero = this.hero;
+    if (!hero) return;
+    hero.xp += amount;
+    while (hero.level < HERO_MAX_LEVEL && hero.xp >= HERO_XP_LEVELS[hero.level]) {
+      hero.level += 1;
+      const stats = this.heroStats(hero);
+      hero.maxHp = stats.hp;
+      hero.hp = stats.hp; // levelling fully heals
+      this.pushEvent({ type: 'hero-levelup', x: hero.x, y: hero.y, level: hero.level + 1, heroType: hero.typeId });
+    }
+  }
+
+  // Enemy melee strength against the hero, per second.
+  enemyAttack(enemy) {
+    const type = this.enemyTypes[enemy.typeId];
+    return (type.attack ?? Math.max(3, Math.round(type.hp * 0.035))) * (enemy.enraged ? 1.5 : 1);
+  }
+
+  updateHero(dt) {
+    const hero = this.hero;
+    if (!hero) return;
+    for (const enemy of this.enemies) enemy.blocked = false;
+    hero.cooldown = Math.max(0, hero.cooldown - dt);
+    hero.abilityCooldown = Math.max(0, hero.abilityCooldown - dt);
+    hero.swing = Math.max(0, hero.swing - dt);
+    if (!hero.alive) {
+      hero.respawn -= dt;
+      if (hero.respawn <= 0) {
+        const gate = this.path.positionAt(Math.max(0, this.path.totalLength - 46));
+        Object.assign(hero, { alive: true, hp: hero.maxHp, x: gate.x, y: gate.y, targetX: null, targetY: null, engaged: 0 });
+        this.pushEvent({ type: 'hero-respawned', x: hero.x, y: hero.y, heroType: hero.typeId });
+      }
+      return;
+    }
+    const stats = this.heroStats(hero);
+    // Walk toward the move order.
+    if (hero.targetX !== null) {
+      const dx = hero.targetX - hero.x;
+      const dy = hero.targetY - hero.y;
+      const dist = Math.hypot(dx, dy);
+      const step = stats.speed * dt;
+      if (dist <= step) {
+        hero.x = hero.targetX;
+        hero.y = hero.targetY;
+        hero.targetX = hero.targetY = null;
+      } else {
+        hero.x += (dx / dist) * step;
+        hero.y += (dy / dist) * step;
+        if (Math.abs(dx) > 1) hero.facing = dx > 0 ? 1 : -1;
+      }
+    }
+    // Who is close enough to fight?
+    const moving = hero.targetX !== null;
+    const near = [];
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      near.push({ enemy, pos, d: Math.hypot(pos.x - hero.x, pos.y - hero.y) });
+    }
+    near.sort((a, b) => b.enemy.dist - a.enemy.dist); // furthest along first
+    // Melee heroes hold enemies that reach them (bosses shove through) and
+    // take their blows; enemies brushing past a ranged hero hit it too.
+    let engaged = 0;
+    const reach = stats.style === 'melee' ? stats.range + 6 : 20;
+    for (const n of near) {
+      if (n.d > reach + n.enemy.radius) continue;
+      if (stats.style === 'melee' && !moving && !n.enemy.boss && engaged < stats.block) n.enemy.blocked = true;
+      engaged += 1;
+      hero.hp -= this.enemyAttack(n.enemy) * (1 - (stats.armor || 0)) * dt;
+    }
+    hero.engaged = engaged;
+    if (hero.hp <= 0) {
+      hero.hp = 0;
+      hero.alive = false;
+      hero.respawn = stats.respawn;
+      for (const enemy of this.enemies) enemy.blocked = false;
+      this.pushEvent({ type: 'hero-died', x: hero.x, y: hero.y, heroType: hero.typeId, respawn: stats.respawn });
+      return;
+    }
+    // Attack.
+    if (hero.cooldown > 0 || moving) return;
+    const attackReach = stats.style === 'melee' ? reach : stats.range; // melee swings at whatever it holds
+    const inRange = near.filter((n) => n.d <= attackReach + n.enemy.radius);
+    if (!inRange.length) return;
+    const target = inRange[0];
+    hero.cooldown = stats.attackInterval;
+    hero.swing = 0.25;
+    if (Math.abs(target.pos.x - hero.x) > 1) hero.facing = target.pos.x > hero.x ? 1 : -1;
+    this.pushEvent({ type: 'hero-attack', heroType: hero.typeId, x: hero.x, y: hero.y, targetX: target.pos.x, targetY: target.pos.y });
+    const hits = stats.splash
+      ? inRange.filter((n) => Math.hypot(n.pos.x - target.pos.x, n.pos.y - target.pos.y) <= stats.splash)
+      : inRange.slice(0, stats.cleave || 1);
+    for (const n of hits) {
+      const before = n.enemy.hp;
+      this.damageEnemy(n.enemy, stats.damage, stats.damageType, { element: stats.element || null, source: 'hero' });
+      if (stats.burn) this.applyBurn(n.enemy, stats.burn, stats.damageType, stats.element);
+      if (stats.lifesteal) hero.hp = Math.min(hero.maxHp, hero.hp + Math.max(0, before - Math.max(0, n.enemy.hp)) * stats.lifesteal);
+    }
+  }
+
+  // The hero's special, centred on the hero.
+  useHeroAbility() {
+    const hero = this.hero;
+    if (!hero || !hero.alive) return { ok: false, reason: 'no hero' };
+    if (hero.abilityCooldown > 0) return { ok: false, reason: 'cooling down' };
+    const stats = this.heroStats(hero);
+    const ability = stats.ability;
+    hero.abilityCooldown = ability.cooldown;
+    hero.swing = 0.4;
+    let struck = 0;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      if (Math.hypot(pos.x - hero.x, pos.y - hero.y) > ability.radius + enemy.radius) continue;
+      struck += 1;
+      this.damageEnemy(enemy, stats.abilityDamage, ability.damageType || stats.damageType, { element: ability.element || null, source: 'hero' });
+      if (!enemy.alive) continue;
+      if (ability.burn) this.applyBurn(enemy, ability.burn, stats.damageType, ability.element);
+      if (ability.slow) this.applySlow(enemy, ability.slow);
+      if (ability.stun) enemy.stun = Math.max(enemy.stun, enemy.boss ? ability.stun * 0.5 : ability.stun);
+    }
+    if (ability.heal) hero.hp = Math.min(hero.maxHp, hero.hp + hero.maxHp * ability.heal);
+    this.pushEvent({ type: 'hero-ability', heroType: hero.typeId, name: ability.name, x: hero.x, y: hero.y, radius: ability.radius, struck });
+    return { ok: true, struck };
   }
 
   cleanupAndCheckEnd() {
@@ -1548,6 +1793,11 @@ class Effects {
         case 'boss-summons': this.spawnSummons(event); break;
         case 'boss-enraged': this.spawnEnrage(event); break;
         case 'shatter': this.spawnShatter(event); break;
+        case 'hero-attack': this.spawnHeroAttack(event); break;
+        case 'hero-ability': this.spawnHeroAbility(event); break;
+        case 'hero-died': this.spawnHeroDeath(event); break;
+        case 'hero-respawned': this.spawnHeroReturn(event); break;
+        case 'hero-levelup': this.spawnHeroLevel(event); break;
         case 'shield-broken': this.spawnShieldBreak(event); break;
         case 'shield-restored': this.spawnShieldRestore(event); break;
         case 'enemy-leaked': this.spawnLeak(event); break;
@@ -1624,6 +1874,10 @@ class Effects {
           x: pos.x + Math.cos(a) * enemy.radius * 1.4, y: pos.y - enemy.radius * 0.3 + Math.sin(a) * enemy.radius * 1.2,
           vx: 0, vy: 0, life: 0.25, size: 1.4, color: '#dff3ff', shape: 'star', spin: 5,
         });
+      }
+      if (enemy.stun > 0 && Math.random() < dt * 10) {
+        const a = rand(0, Math.PI * 2);
+        this.addParticle({ x: pos.x + Math.cos(a) * enemy.radius * 0.8, y: pos.y - enemy.radius * 1.4 + Math.sin(a) * 3, vx: 0, vy: -6, life: 0.4, size: 1.8, color: '#ffd700', shape: 'star', spin: 6 });
       }
       if (enemy.enraged && Math.random() < dt * 12) {
         this.addParticle({
@@ -2065,6 +2319,126 @@ class Effects {
     this.shake = Math.max(this.shake, 4);
   }
 
+  // --- Hero -------------------------------------------------------------------
+
+  spawnHeroAttack(event) {
+    const t = event.heroType;
+    const dx = event.targetX - event.x;
+    const dy = event.targetY - event.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    if (t === 'dragon') {
+      // A gout of fire from the maw to the target.
+      for (let i = 0; i < 8; i++) {
+        const t2 = i / 8;
+        this.addParticle({ x: event.x + ux * 14 + ux * len * t2 * 0.6, y: event.y - 16 + uy * len * t2 * 0.6, vx: ux * rand(120, 220), vy: uy * rand(120, 220) - 10, life: rand(0.2, 0.35), size: rand(3, 5), color: pick(['#ff9a3a', '#ff7a2a', '#ffc45a', '#ff5a1f']), shape: 'fire', drag: 2.5, grow: 1.5 });
+      }
+      this.addParticle({ x: event.targetX, y: event.targetY, vx: 0, vy: 0, life: 0.25, size: 22, color: 'rgba(255,140,50,0.8)', shape: 'glow' });
+      for (let i = 0; i < 4; i++) {
+        this.addParticle({ x: event.targetX + rand(-10, 10), y: event.targetY + rand(-6, 6), vx: rand(-20, 20), vy: rand(-60, -25), life: rand(0.3, 0.5), size: rand(2, 3.5), color: pick(['#ff9f45', '#ffd97a']), shape: 'fire', drag: 1.5 });
+      }
+    } else if (t === 'mage') {
+      this.addParticle({ x: event.x + ux * 10, y: event.y - 22 + uy * 10, x2: event.targetX, y2: event.targetY, vx: 0, vy: 0, life: 0.16, size: 3, color: '#c9bfff', shape: 'tracer' });
+      this.addParticle({ x: event.targetX, y: event.targetY, vx: 0, vy: 0, life: 0.18, size: 14, color: 'rgba(185,167,255,0.9)', shape: 'glow' });
+      for (let i = 0; i < 6; i++) {
+        const a = rand(0, Math.PI * 2);
+        this.addParticle({ x: event.targetX, y: event.targetY, vx: Math.cos(a) * rand(30, 80), vy: Math.sin(a) * rand(30, 80), life: rand(0.25, 0.45), size: rand(1.4, 2.6), color: pick(['#b9a7ff', '#e6dcff', '#ffffff']), shape: 'star', spin: rand(-6, 6), drag: 2 });
+      }
+    } else {
+      // Melee: a bright slash arc and sparks where steel meets hide.
+      const color = t === 'paladin' ? '#c6ff6b' : '#ffffff';
+      this.addParticle({ x: event.x + ux * 12, y: event.y - 10 + uy * 12, x2: event.targetX, y2: event.targetY - 6, vx: 0, vy: 0, life: 0.12, size: 3, color, shape: 'tracer' });
+      for (let i = 0; i < 5; i++) {
+        this.addParticle({ x: event.targetX, y: event.targetY - 4, vx: rand(-70, 70), vy: rand(-80, -20), life: rand(0.15, 0.3), size: rand(1.2, 2.2), color: i % 2 ? color : '#ffd97a', shape: 'spark', gravity: 200 });
+      }
+      if (t === 'paladin') {
+        this.addParticle({ x: event.x, y: event.y - 12, vx: 0, vy: -20, life: 0.4, size: 6, color: 'rgba(143,211,58,0.5)', shape: 'glow', grow: 2 });
+      }
+    }
+  }
+
+  spawnHeroAbility(event) {
+    const t = event.heroType;
+    const r = event.radius;
+    this.addText(event.x, event.y - 30, event.name, '#ffd98a', 1.3);
+    if (t === 'dragon') {
+      this.addFlash('#3a1000', 0.25);
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: r, color: 'rgba(255,120,40,0.9)', shape: 'ring' });
+      for (let i = 0; i < 40; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7 - rand(40, 90), vx: rand(-10, 10), vy: rand(140, 220), life: rand(0.35, 0.6), size: rand(3, 6), color: pick(['#ff9a3a', '#ff7a2a', '#ffc45a', '#ff5a1f']), shape: 'fire', grow: 1.4 });
+      }
+      for (let i = 0; i < 10; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addGroundParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, life: rand(2, 4), size: rand(5, 9), color: 'rgba(30,20,15,0.45)', shape: 'scorch' });
+      }
+      this.shake = Math.max(this.shake, 4);
+    } else if (t === 'knight') {
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: r, color: 'rgba(255,255,255,0.9)', shape: 'ring' });
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2;
+        this.addParticle({ x: event.x + Math.cos(a) * 10, y: event.y - 8 + Math.sin(a) * 6, vx: Math.cos(a) * rand(120, 220), vy: Math.sin(a) * rand(70, 140), life: rand(0.2, 0.35), size: rand(1.5, 2.5), color: i % 2 ? '#ffffff' : '#9fc3ff', shape: 'spark', drag: 2 });
+      }
+      this.shake = Math.max(this.shake, 2.5);
+    } else if (t === 'mage') {
+      this.addFlash('#102040', 0.2);
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.6, size: r, color: 'rgba(143,211,255,0.9)', shape: 'ring' });
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: r * 0.6, color: 'rgba(223,243,255,0.8)', shape: 'glow' });
+      for (let i = 0; i < 30; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(10, r);
+        this.addParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: rand(-10, 10), vy: rand(-40, -15), life: rand(0.5, 1), size: rand(1.2, 2.4), color: '#ffffff', shape: 'flake', spin: rand(-5, 5), drag: 1 });
+      }
+      for (let i = 0; i < 8; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addGroundParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, life: rand(2, 3.5), size: rand(8, 14), color: 'rgba(191,233,255,0.45)', shape: 'frostpatch' });
+      }
+    } else {
+      this.addFlash('#102a10', 0.2);
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: r, color: 'rgba(198,255,107,0.9)', shape: 'ring' });
+      this.addGroundParticle({ x: event.x, y: event.y + 4, vx: 0, vy: 0, life: 2.5, size: r * 0.8, color: 'rgba(143,211,58,0.25)', shape: 'puddle' });
+      for (let i = 0; i < 26; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: 0, vy: rand(-70, -30), life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#c6ff6b', '#8fd33a', '#ffffff']), shape: 'ember', drag: 0.5 });
+      }
+      for (let i = 0; i < 6; i++) {
+        this.addParticle({ x: event.x + rand(-8, 8), y: event.y - 10, vx: 0, vy: rand(-40, -20), life: 0.8, size: 2, color: '#9bff9b', shape: 'star' });
+      }
+    }
+  }
+
+  spawnHeroDeath(event) {
+    this.setBanner('Hero down', '#e25555', `returns in ${event.respawn}s`);
+    this.addFlash('#300000', 0.2);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 30, color: 'rgba(226,85,85,0.9)', shape: 'ring' });
+    for (let i = 0; i < 14; i++) {
+      this.addParticle({ x: event.x, y: event.y - 8, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#e25555', '#ffffff', '#ffd97a']), shape: 'ember', gravity: 120 });
+    }
+  }
+
+  spawnHeroReturn(event) {
+    this.addText(event.x, event.y - 24, 'Hero returns!', '#ffd98a', 1.1);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 24, color: 'rgba(255,217,138,0.9)', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y - 10, vx: 0, vy: 0, life: 0.4, size: 20, color: 'rgba(255,240,200,0.8)', shape: 'glow' });
+    for (let i = 0; i < 12; i++) {
+      this.addParticle({ x: event.x + rand(-10, 10), y: event.y + rand(-4, 4), vx: 0, vy: rand(-80, -30), life: rand(0.5, 0.9), size: rand(1.2, 2.2), color: '#ffd98a', shape: 'star', spin: 3 });
+    }
+  }
+
+  spawnHeroLevel(event) {
+    this.addText(event.x, event.y - 28, `Level ${event.level}!`, '#ffd700', 1.4);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 28, color: '#ffd700', shape: 'ring' });
+    for (let i = 0; i < 16; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y - 8, vx: Math.cos(a) * rand(30, 90), vy: Math.sin(a) * rand(30, 90) - 40, life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#ffd700', '#ffffff', '#ffd98a']), shape: 'star', spin: rand(-6, 6), gravity: 80 });
+    }
+  }
+
   // Thermal shock: fire meets ice. Frost ring, steam, shards, damage text.
   spawnShatter(event) {
     this.addText(event.x, event.y - 14, `Shatter! ${event.damage}`, '#dff3ff', 1.3);
@@ -2292,6 +2666,7 @@ function render(ctx, game, effects, ui, time) {
   drawDecorations(ctx, scene.decor, level.theme, time);
   drawTowers(ctx, game, ui, time);
   drawEnemies(ctx, game, time);
+  drawHero(ctx, game, ui, time);
   drawProjectiles(ctx, game);
   drawBeams(ctx, game, time);
   drawFlameJets(ctx, game, time);
@@ -6226,6 +6601,558 @@ function drawBolts(ctx, bolts) {
   ctx.globalAlpha = 1;
 }
 
+// --- Hero -----------------------------------------------------------------------
+
+function drawHero(ctx, game, ui, time) {
+  const hero = game.hero;
+  if (!hero) return;
+  if (!hero.alive) return;
+  const type = game.heroTypes[hero.typeId];
+  const x = hero.x;
+  const y = hero.y;
+  const moving = hero.targetX !== null;
+  const stride = moving ? Math.sin(time * 14) : 0;
+  const bob = type.style === 'ranged' && hero.typeId === 'dragon' ? Math.sin(time * 5) * 3 + 14 : Math.abs(stride) * 2;
+
+  // Move marker.
+  if (ui.marker) {
+    const k = ui.marker.life / 0.8;
+    ctx.strokeStyle = `rgba(255,217,138,${k})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(ui.marker.x, ui.marker.y, 10 * (1.6 - k * 0.6), 4.5 * (1.6 - k * 0.6), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ui.marker.x - 4, ui.marker.y);
+    ctx.lineTo(ui.marker.x + 4, ui.marker.y);
+    ctx.moveTo(ui.marker.x, ui.marker.y - 2);
+    ctx.lineTo(ui.marker.x, ui.marker.y + 2);
+    ctx.stroke();
+  }
+  // Selection ring and ability radius hint.
+  if (ui.heroSelected) {
+    ctx.strokeStyle = `rgba(255,217,138,${0.7 + Math.sin(time * 6) * 0.25})`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = -time * 20;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4, 18, 8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255,217,138,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, type.ability.radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Shadow.
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 5, 12 - bob * 0.15, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(x, y - bob);
+  ctx.scale(hero.facing, 1);
+  const swing = hero.swing > 0 ? Math.max(0, Math.sin(Math.min(1, hero.swing / 0.25) * Math.PI)) : 0;
+  if (hero.typeId === 'dragon') drawHeroDragon(ctx, time, swing, stride);
+  else if (hero.typeId === 'knight') drawHeroKnight(ctx, time, swing, stride);
+  else if (hero.typeId === 'mage') drawHeroMage(ctx, time, swing, stride);
+  else drawHeroPaladin(ctx, time, swing, stride);
+  ctx.restore();
+
+  // Health bar and level pips.
+  const w = 30;
+  const frac = Math.max(0, hero.hp / hero.maxHp);
+  const by = y - bob - 34 - (hero.typeId === 'dragon' ? 6 : 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(x - w / 2 - 1, by - 1, w + 2, 5);
+  ctx.fillStyle = frac > 0.5 ? '#8fb273' : frac > 0.25 ? '#e2b84a' : '#e25555';
+  ctx.fillRect(x - w / 2, by, w * frac, 3);
+  ctx.fillStyle = '#ffd700';
+  for (let p = 0; p <= hero.level; p++) {
+    ctx.beginPath();
+    ctx.arc(x - hero.level * 3 + p * 6, by - 4, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Ember Drake: a red winged drake hovering above the field, wings beating,
+// tail curling, embers at the maw.
+function drawHeroDragon(ctx, time, swing, stride) {
+  const flap = Math.sin(time * 9);
+  // Wings (behind).
+  const wing = (side) => {
+    ctx.save();
+    ctx.scale(1, 1);
+    const g = ctx.createLinearGradient(0, -8, 0, 10);
+    g.addColorStop(0, '#c8402a');
+    g.addColorStop(1, '#6e1c12');
+    ctx.fillStyle = g;
+    ctx.strokeStyle = '#4a120c';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-2, -4);
+    ctx.quadraticCurveTo(-10 * side, -16 - flap * 6, -22 * side, -10 - flap * 8);
+    ctx.lineTo(-19 * side, -2 - flap * 3);
+    ctx.lineTo(-23 * side, 4 - flap * 2);
+    ctx.lineTo(-14 * side, 2);
+    ctx.lineTo(-16 * side, 9);
+    ctx.quadraticCurveTo(-8 * side, 4, -2, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.moveTo(-3, -2);
+    ctx.lineTo(-19 * side, -2 - flap * 3);
+    ctx.moveTo(-3, 0);
+    ctx.lineTo(-14 * side, 2);
+    ctx.stroke();
+    ctx.restore();
+  };
+  wing(-1);
+  // Tail.
+  ctx.strokeStyle = '#a8321f';
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-6, 4);
+  ctx.quadraticCurveTo(-16, 8 + Math.sin(time * 3) * 3, -22, 2 + Math.sin(time * 4) * 4);
+  ctx.stroke();
+  ctx.fillStyle = '#6e1c12';
+  ctx.beginPath();
+  ctx.moveTo(-22, 2 + Math.sin(time * 4) * 4);
+  ctx.lineTo(-27, -1 + Math.sin(time * 4) * 4);
+  ctx.lineTo(-25, 5 + Math.sin(time * 4) * 4);
+  ctx.closePath();
+  ctx.fill();
+  // Body.
+  ctx.fillStyle = domeGradient(ctx, 0, 0, 11, '#ff8a5a', '#c8402a', '#6e1c12');
+  ctx.strokeStyle = '#4a120c';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 11, 8.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Belly scales.
+  ctx.fillStyle = '#f5c56a';
+  ctx.beginPath();
+  ctx.ellipse(2, 3, 7, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,70,20,0.5)';
+  ctx.lineWidth = 0.8;
+  for (let k = -1; k <= 1; k++) {
+    ctx.beginPath();
+    ctx.moveTo(-3 + k * 3.5, 1.5);
+    ctx.lineTo(-3 + k * 3.5, 5.5);
+    ctx.stroke();
+  }
+  // Back spines.
+  ctx.fillStyle = '#6e1c12';
+  for (let k = 0; k < 4; k++) {
+    ctx.beginPath();
+    ctx.moveTo(-7 + k * 3.5, -7);
+    ctx.lineTo(-5.5 + k * 3.5, -11);
+    ctx.lineTo(-4 + k * 3.5, -7);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Head with horns, eye, maw.
+  ctx.fillStyle = domeGradient(ctx, 11, -4, 6.5, '#ff8a5a', '#c8402a', '#6e1c12');
+  ctx.strokeStyle = '#4a120c';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(11, -4, 7, 5.5, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#f5e6c4';
+  for (const [hx, hy] of [[7, -8], [10, -9]]) {
+    ctx.beginPath();
+    ctx.moveTo(hx - 1.2, hy);
+    ctx.lineTo(hx + 1, hy - 5);
+    ctx.lineTo(hx + 2, hy);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.arc(13, -5.5, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1a0a08';
+  ctx.beginPath();
+  ctx.ellipse(13.4, -5.5, 0.6, 1.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Maw, open while breathing fire.
+  ctx.fillStyle = '#4a120c';
+  ctx.beginPath();
+  ctx.moveTo(15, -2.5);
+  ctx.lineTo(19, -2 + swing * 2);
+  ctx.lineTo(15, 0.5 + swing * 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, 18, -1, 5 + swing * 6, `rgba(255,140,50,${0.5 + swing * 0.4})`);
+  if (swing > 0.1) drawFlameTongue(ctx, 18, -1, 0, 10 + swing * 10, 4, time, 1);
+  ctx.globalCompositeOperation = 'source-over';
+  wing(1);
+}
+
+// Sir Aldric: plate armour, blue tabard, kite shield, greatsword that swings.
+function drawHeroKnight(ctx, time, swing, stride) {
+  // Legs.
+  ctx.strokeStyle = '#4a4f55';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-3, 2);
+  ctx.lineTo(-4 - stride * 3, 9);
+  ctx.moveTo(3, 2);
+  ctx.lineTo(4 + stride * 3, 9);
+  ctx.stroke();
+  // Cape.
+  ctx.fillStyle = '#2a4c80';
+  ctx.beginPath();
+  ctx.moveTo(-5, -12);
+  ctx.quadraticCurveTo(-14 - Math.sin(time * 3) * 2, -2, -10 - Math.sin(time * 3) * 3, 8);
+  ctx.lineTo(-2, 4);
+  ctx.closePath();
+  ctx.fill();
+  // Torso: plate with tabard.
+  ctx.fillStyle = cylinderGradient(ctx, -8, 8, '#5c6268', '#c9ced4', '#aab1b8');
+  ctx.strokeStyle = '#2e3338';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, -8, -13, 16, 17, 4);
+  ctx.fillStyle = '#4a6fa5';
+  ctx.beginPath();
+  ctx.moveTo(-4, -12);
+  ctx.lineTo(4, -12);
+  ctx.lineTo(3, 3);
+  ctx.lineTo(0, 5);
+  ctx.lineTo(-3, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(2, -4);
+  ctx.lineTo(0, -1);
+  ctx.lineTo(-2, -4);
+  ctx.closePath();
+  ctx.fill();
+  // Pauldrons.
+  ctx.fillStyle = domeGradient(ctx, -8, -11, 4, '#e0e4e8', '#aab1b8', '#5c6268');
+  ctx.beginPath();
+  ctx.arc(-8, -11, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = domeGradient(ctx, 8, -11, 4, '#e0e4e8', '#aab1b8', '#5c6268');
+  ctx.beginPath();
+  ctx.arc(8, -11, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  // Shield on the off hand.
+  const sg = ctx.createLinearGradient(-14, -10, -6, 2);
+  sg.addColorStop(0, '#6f93c9');
+  sg.addColorStop(1, '#2a4c80');
+  ctx.fillStyle = sg;
+  ctx.strokeStyle = '#c9ced4';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-14, -10);
+  ctx.lineTo(-6, -10);
+  ctx.lineTo(-6, -1);
+  ctx.quadraticCurveTo(-10, 5, -14, -1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.arc(-10, -5, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  // Helmet with visor and plume.
+  ctx.fillStyle = domeGradient(ctx, 0, -19, 6.5, '#e8ecf0', '#aab1b8', '#5c6268');
+  ctx.strokeStyle = '#2e3338';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(0, -19, 6.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#1b1f24';
+  ctx.fillRect(1, -20.5, 6, 2.2);
+  ctx.strokeStyle = '#5c6268';
+  ctx.lineWidth = 0.8;
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    ctx.moveTo(2 + k * 1.8, -17.5);
+    ctx.lineTo(2 + k * 1.8, -14.5);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#b8323a';
+  ctx.beginPath();
+  ctx.moveTo(-2, -25);
+  ctx.quadraticCurveTo(-8 - Math.sin(time * 4) * 2, -30, -12, -22);
+  ctx.quadraticCurveTo(-6, -24, -1, -22);
+  ctx.closePath();
+  ctx.fill();
+  // Greatsword: raised, swings down on attack.
+  ctx.save();
+  ctx.translate(8, -6);
+  ctx.rotate(-0.9 + swing * 1.9);
+  ctx.strokeStyle = '#5a4322';
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, 6);
+  ctx.stroke();
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(-4, -1.2, 8, 2.2);
+  const bg = ctx.createLinearGradient(-1.5, 0, 1.5, 0);
+  bg.addColorStop(0, '#9aa1a8');
+  bg.addColorStop(0.5, '#ffffff');
+  bg.addColorStop(1, '#8a9198');
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.moveTo(-1.8, -1.5);
+  ctx.lineTo(1.8, -1.5);
+  ctx.lineTo(1.2, -20);
+  ctx.lineTo(0, -23);
+  ctx.lineTo(-1.2, -20);
+  ctx.closePath();
+  ctx.fill();
+  if (swing > 0.2) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,255,255,${swing * 0.7})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, -1.6, -0.2);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
+}
+
+// Ilyria: violet robes, pointed hat, staff topped with a glowing crystal.
+function drawHeroMage(ctx, time, swing, stride) {
+  // Robe hem and body.
+  const rg = ctx.createLinearGradient(-9, -14, 9, 8);
+  rg.addColorStop(0, '#5a4fcf');
+  rg.addColorStop(1, '#2b2650');
+  ctx.fillStyle = rg;
+  ctx.strokeStyle = '#1e1a3a';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-6, -13);
+  ctx.lineTo(6, -13);
+  ctx.quadraticCurveTo(9, 0, 10 + stride * 2, 9);
+  ctx.lineTo(-10 - stride * 2, 9);
+  ctx.quadraticCurveTo(-9, 0, -6, -13);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Sash and runes.
+  ctx.fillStyle = '#e2b84a';
+  ctx.fillRect(-7, -4, 14, 2);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(185,167,255,${0.5 + Math.sin(time * 3) * 0.3})`;
+  ctx.lineWidth = 1;
+  for (const [rx, ry] of [[-3, 2], [3, 4], [0, -8]]) {
+    ctx.beginPath();
+    ctx.moveTo(rx - 1.5, ry - 1.5);
+    ctx.lineTo(rx + 1.5, ry + 1.5);
+    ctx.moveTo(rx + 1.5, ry - 1.5);
+    ctx.lineTo(rx - 1.5, ry + 1.5);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // Head and hat.
+  ctx.fillStyle = '#e7c9a3';
+  ctx.beginPath();
+  ctx.arc(0, -17, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#7a4a3a';
+  ctx.beginPath();
+  ctx.moveTo(-4.5, -16);
+  ctx.quadraticCurveTo(-7, -8, -5, -4);
+  ctx.lineTo(-3, -12);
+  ctx.closePath();
+  ctx.fill();
+  const hg = ctx.createLinearGradient(-9, -20, 9, -20);
+  hg.addColorStop(0, '#2b2650');
+  hg.addColorStop(0.5, '#5a4fcf');
+  hg.addColorStop(1, '#2b2650');
+  ctx.fillStyle = hg;
+  ctx.strokeStyle = '#1e1a3a';
+  ctx.beginPath();
+  ctx.ellipse(0, -20, 10, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-6, -20);
+  ctx.quadraticCurveTo(-1, -30, 3 + Math.sin(time * 2) * 1.5, -36);
+  ctx.quadraticCurveTo(3, -28, 6, -20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#e2b84a';
+  ctx.fillRect(-5, -22.5, 10, 1.6);
+  // Staff with crystal; raised when casting.
+  ctx.save();
+  ctx.translate(8, -4);
+  ctx.rotate(-0.2 - swing * 0.6);
+  ctx.strokeStyle = '#5a4322';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, 12);
+  ctx.lineTo(0, -16);
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, 0, -19, 8 + swing * 6, `rgba(143,123,255,${0.45 + swing * 0.4})`);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = domeGradient(ctx, 0, -19, 3.5, '#ffffff', '#c9bfff', '#8f7bff');
+  ctx.beginPath();
+  ctx.moveTo(0, -23.5);
+  ctx.lineTo(3, -19);
+  ctx.lineTo(0, -14.5);
+  ctx.lineTo(-3, -19);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  // Orbiting motes.
+  ctx.fillStyle = '#e6dcff';
+  for (let k = 0; k < 3; k++) {
+    const a = time * 2.5 + (k / 3) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 13, -10 + Math.sin(a) * 5, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Mordrek: bone-white skeleton in blackened plate, green tabard, flanged mace,
+// eyes burning green.
+function drawHeroPaladin(ctx, time, swing, stride) {
+  // Legs (bone).
+  ctx.strokeStyle = '#e9e2d0';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-3, 2);
+  ctx.lineTo(-4 - stride * 3, 9);
+  ctx.moveTo(3, 2);
+  ctx.lineTo(4 + stride * 3, 9);
+  ctx.stroke();
+  // Tattered cape.
+  ctx.fillStyle = '#1f2a1a';
+  ctx.beginPath();
+  ctx.moveTo(-5, -12);
+  ctx.quadraticCurveTo(-14 - Math.sin(time * 3) * 2, -2, -11 - Math.sin(time * 3) * 3, 8);
+  ctx.lineTo(-8, 4);
+  ctx.lineTo(-6, 7);
+  ctx.lineTo(-2, 3);
+  ctx.closePath();
+  ctx.fill();
+  // Blackened plate torso with green tabard.
+  ctx.fillStyle = cylinderGradient(ctx, -8, 8, '#1b1f24', '#5c6268', '#3a3f45');
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, -8, -13, 16, 17, 4);
+  ctx.fillStyle = '#3f7a35';
+  ctx.beginPath();
+  ctx.moveTo(-4, -12);
+  ctx.lineTo(4, -12);
+  ctx.lineTo(3, 3);
+  ctx.lineTo(0, 5);
+  ctx.lineTo(-3, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#c6ff6b';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, -9);
+  ctx.lineTo(0, -1);
+  ctx.moveTo(-2.5, -6);
+  ctx.lineTo(2.5, -6);
+  ctx.stroke();
+  // Spiked pauldrons.
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = domeGradient(ctx, side * 8, -11, 4, '#8a9198', '#4a4f55', '#1b1f24');
+    ctx.beginPath();
+    ctx.arc(side * 8, -11, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e9e2d0';
+    ctx.beginPath();
+    ctx.moveTo(side * 9, -14);
+    ctx.lineTo(side * 11, -19);
+    ctx.lineTo(side * 7, -14.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Skull with burning eyes.
+  ctx.fillStyle = domeGradient(ctx, 0, -19, 6, '#ffffff', '#e9e2d0', '#a89f88');
+  ctx.strokeStyle = '#6b6354';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, -19.5, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#e9e2d0';
+  ctx.fillRect(-3.5, -15, 7, 3);
+  ctx.strokeStyle = '#6b6354';
+  ctx.lineWidth = 0.7;
+  for (let k = -2; k <= 2; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * 1.5, -15);
+    ctx.lineTo(k * 1.5, -12);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#1b1f24';
+  ctx.beginPath();
+  ctx.ellipse(-2.3, -20, 1.8, 2.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(2.3, -20, 1.8, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, -2.3, -20, 3.5, `rgba(143,255,80,${0.7 + Math.sin(time * 8) * 0.2})`);
+  glowDisc(ctx, 2.3, -20, 3.5, `rgba(143,255,80,${0.7 + Math.sin(time * 8 + 1) * 0.2})`);
+  ctx.globalCompositeOperation = 'source-over';
+  // Crown of bone.
+  ctx.fillStyle = '#a89f88';
+  for (let k = -1; k <= 1; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * 3.5 - 1.2, -24);
+    ctx.lineTo(k * 3.5, -28);
+    ctx.lineTo(k * 3.5 + 1.2, -24);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Flanged mace: swings on attack.
+  ctx.save();
+  ctx.translate(8, -6);
+  ctx.rotate(-0.8 + swing * 1.8);
+  ctx.strokeStyle = '#3a3f45';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(0, 4);
+  ctx.lineTo(0, -14);
+  ctx.stroke();
+  ctx.fillStyle = domeGradient(ctx, 0, -17, 4, '#8a9198', '#4a4f55', '#1b1f24');
+  ctx.beginPath();
+  ctx.arc(0, -17, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8a9198';
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 3, -17 + Math.sin(a) * 3);
+    ctx.lineTo(Math.cos(a) * 6.5, -17 + Math.sin(a) * 6.5);
+    ctx.lineTo(Math.cos(a + 0.5) * 3, -17 + Math.sin(a + 0.5) * 3);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, 0, -17, 7 + swing * 6, `rgba(143,255,80,${0.3 + swing * 0.5})`);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+
 // --- Enemies: sprite composer ------------------------------------------------
 
 function drawEnemies(ctx, game, time) {
@@ -6323,6 +7250,16 @@ function drawEnemies(ctx, game, time) {
 
     // Trait visuals: elemental aura, regeneration pulse, energy shield, rage.
     drawEnemyTraits(ctx, enemy, x, y, pos, r, time);
+    if (enemy.stun > 0) {
+      // Dizzy stars circling the head.
+      ctx.fillStyle = '#ffd700';
+      for (let k = 0; k < 3; k++) {
+        const a = time * 6 + (k / 3) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * r * 0.9, y - r * 1.3 + Math.sin(a) * 2.5, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     // White hit-flash overlay while enemy.flash runs down.
     if (enemy.flash > 0) {
@@ -7389,6 +8326,8 @@ function drawRange(ctx, spot, range) {
 
 
 const PROGRESS_KEY = 'towerrush-progress';
+const HERO_KEY = 'towerrush-hero';
+const HERO_ICONS = { dragon: '🐉', knight: '🛡️', mage: '🔮', paladin: '💀' };
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -7421,7 +8360,7 @@ fitCanvas();
 window.addEventListener('resize', fitCanvas);
 if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => fitCanvas()).observe(stageEl);
 const effects = new Effects();
-const ui = { selectedSpot: -1 };
+const ui = { selectedSpot: -1, heroSelected: false, marker: null };
 
 // --- Saved progress (best effort; storage may be unavailable) -----------
 
@@ -7440,6 +8379,20 @@ function saveUnlocked(n) {
   } catch {
     /* storage unavailable: progress just isn't remembered */
   }
+}
+
+function loadHeroChoice() {
+  try {
+    const id = localStorage.getItem(HERO_KEY);
+    return HERO_TYPES[id] ? id : 'knight';
+  } catch {
+    return 'knight';
+  }
+}
+let heroChoice = loadHeroChoice();
+function saveHeroChoice(id) {
+  heroChoice = id;
+  try { localStorage.setItem(HERO_KEY, id); } catch { /* not remembered */ }
 }
 
 // --- HUD elements -------------------------------------------------------
@@ -7522,27 +8475,88 @@ canvas.addEventListener('click', (event) => {
   const x = (event.clientX - rect.left) * (game.level.width / rect.width);
   const y = (event.clientY - rect.top) * (game.level.height / rect.height);
 
-  ui.selectedSpot = -1;
-  game.level.buildSpots.forEach((spot, i) => {
-    if (Math.hypot(spot.x - x, spot.y - y) <= 22) ui.selectedSpot = i;
+  // Hero first: click it to select, then click the ground to send it there.
+  const hero = game.hero;
+  if (hero && hero.alive && Math.hypot(hero.x - x, hero.y - y) <= 20) {
+    ui.heroSelected = !ui.heroSelected;
+    ui.selectedSpot = -1;
+    updateHud();
+    return;
+  }
+  let spot = -1;
+  game.level.buildSpots.forEach((s, i) => {
+    if (Math.hypot(s.x - x, s.y - y) <= 22) spot = i;
   });
+  if (spot < 0 && ui.heroSelected && hero && hero.alive) {
+    game.commandHero(x, y);
+    ui.marker = { x, y, life: 0.8 };
+    return;
+  }
+  ui.selectedSpot = spot;
+  ui.heroSelected = false;
   updateHud();
 });
+
+// Hero ability: button or Q.
+const heroPanel = document.getElementById('hero-panel');
+const heroPortraitEl = document.getElementById('hero-portrait');
+const heroNameEl = document.getElementById('hero-name');
+const heroHpFill = document.getElementById('hero-hp-fill');
+const heroLevelEl = document.getElementById('hero-level');
+const heroAbilityBtn = document.getElementById('hero-ability');
+heroAbilityBtn.addEventListener('click', () => { game.useHeroAbility(); updateHeroPanel(); });
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'q' || e.key === 'Q') { game.useHeroAbility(); updateHeroPanel(); }
+});
+
+function updateHeroPanel() {
+  const hero = game.hero;
+  heroPanel.hidden = !hero;
+  if (!hero) return;
+  const type = HERO_TYPES[hero.typeId];
+  heroPortraitEl.textContent = HERO_ICONS[hero.typeId] || '⭐';
+  heroNameEl.textContent = hero.alive ? type.name : `${type.name} returns in ${Math.ceil(hero.respawn)}s`;
+  heroHpFill.style.width = `${Math.round((hero.hp / hero.maxHp) * 100)}%`;
+  heroLevelEl.textContent = `Lv ${hero.level + 1}`;
+  const cd = hero.abilityCooldown;
+  heroAbilityBtn.disabled = !hero.alive || cd > 0;
+  heroAbilityBtn.textContent = cd > 0 ? `${type.ability.name} (${Math.ceil(cd)}s)` : `${type.ability.name} (Q)`;
+  heroAbilityBtn.title = type.ability.desc;
+}
 
 // --- Level flow -----------------------------------------------------------
 
 function loadLevel(index) {
   levelIndex = Math.min(Math.max(index, 0), LEVELS.length - 1);
   game = new Game(LEVELS[levelIndex]);
+  game.setHero(heroChoice);
   fitCanvas();
   effects.clear();
   ui.selectedSpot = -1;
+  ui.heroSelected = false;
+  ui.marker = null;
   levelSelect.hidden = true;
   updateHud();
+  updateHeroPanel();
+}
+
+const heroList = document.getElementById('hero-list');
+function renderHeroPicker() {
+  heroList.replaceChildren();
+  for (const hero of Object.values(HERO_TYPES)) {
+    const btn = document.createElement('button');
+    btn.className = `hero-btn${hero.id === heroChoice ? ' selected' : ''}`;
+    btn.style.setProperty('--hero', hero.color);
+    btn.title = `${hero.desc} Ability: ${hero.ability.name} — ${hero.ability.desc}`;
+    btn.innerHTML = `<span class="hero-icon">${HERO_ICONS[hero.id] || '⭐'}</span><strong>${hero.name}</strong><small>${hero.title}</small><small>${hero.ability.name}</small>`;
+    btn.addEventListener('click', () => { saveHeroChoice(hero.id); renderHeroPicker(); });
+    heroList.appendChild(btn);
+  }
 }
 
 function showLevelSelect() {
   const unlocked = loadUnlocked();
+  renderHeroPicker();
   levelList.replaceChildren();
   LEVELS.forEach((level, i) => {
     const btn = document.createElement('button');
@@ -7643,6 +8657,7 @@ function updateHud() {
 // --- Game loop ----------------------------------------------------------
 
 let lastTime = performance.now();
+let heroPanelTimer = 0;
 function frame(now) {
   // Clamp dt so a background tab doesn't fast-forward the simulation.
   const dt = Math.min((now - lastTime) / 1000, 0.05);
@@ -7661,6 +8676,15 @@ function frame(now) {
   }
   if (game.phase !== phaseBefore || game.gold !== goldBefore || game.lives !== livesBefore) {
     updateHud();
+  }
+  if (ui.marker) {
+    ui.marker.life -= dt;
+    if (ui.marker.life <= 0) ui.marker = null;
+  }
+  heroPanelTimer += dt;
+  if (heroPanelTimer > 0.1) {
+    heroPanelTimer = 0;
+    updateHeroPanel();
   }
   render(ctx, game, effects, ui, now / 1000);
   requestAnimationFrame(frame);

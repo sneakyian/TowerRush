@@ -66,6 +66,11 @@ export class Effects {
         case 'boss-summons': this.spawnSummons(event); break;
         case 'boss-enraged': this.spawnEnrage(event); break;
         case 'shatter': this.spawnShatter(event); break;
+        case 'hero-attack': this.spawnHeroAttack(event); break;
+        case 'hero-ability': this.spawnHeroAbility(event); break;
+        case 'hero-died': this.spawnHeroDeath(event); break;
+        case 'hero-respawned': this.spawnHeroReturn(event); break;
+        case 'hero-levelup': this.spawnHeroLevel(event); break;
         case 'shield-broken': this.spawnShieldBreak(event); break;
         case 'shield-restored': this.spawnShieldRestore(event); break;
         case 'enemy-leaked': this.spawnLeak(event); break;
@@ -142,6 +147,10 @@ export class Effects {
           x: pos.x + Math.cos(a) * enemy.radius * 1.4, y: pos.y - enemy.radius * 0.3 + Math.sin(a) * enemy.radius * 1.2,
           vx: 0, vy: 0, life: 0.25, size: 1.4, color: '#dff3ff', shape: 'star', spin: 5,
         });
+      }
+      if (enemy.stun > 0 && Math.random() < dt * 10) {
+        const a = rand(0, Math.PI * 2);
+        this.addParticle({ x: pos.x + Math.cos(a) * enemy.radius * 0.8, y: pos.y - enemy.radius * 1.4 + Math.sin(a) * 3, vx: 0, vy: -6, life: 0.4, size: 1.8, color: '#ffd700', shape: 'star', spin: 6 });
       }
       if (enemy.enraged && Math.random() < dt * 12) {
         this.addParticle({
@@ -581,6 +590,126 @@ export class Effects {
       this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(60, 160), vy: Math.sin(a) * rand(60, 160), life: rand(0.3, 0.6), size: rand(2, 4), color: pick(['#ff3b2f', '#ff9f45', '#ffd97a']), shape: 'fire', drag: 2 });
     }
     this.shake = Math.max(this.shake, 4);
+  }
+
+  // --- Hero -------------------------------------------------------------------
+
+  spawnHeroAttack(event) {
+    const t = event.heroType;
+    const dx = event.targetX - event.x;
+    const dy = event.targetY - event.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    if (t === 'dragon') {
+      // A gout of fire from the maw to the target.
+      for (let i = 0; i < 8; i++) {
+        const t2 = i / 8;
+        this.addParticle({ x: event.x + ux * 14 + ux * len * t2 * 0.6, y: event.y - 16 + uy * len * t2 * 0.6, vx: ux * rand(120, 220), vy: uy * rand(120, 220) - 10, life: rand(0.2, 0.35), size: rand(3, 5), color: pick(['#ff9a3a', '#ff7a2a', '#ffc45a', '#ff5a1f']), shape: 'fire', drag: 2.5, grow: 1.5 });
+      }
+      this.addParticle({ x: event.targetX, y: event.targetY, vx: 0, vy: 0, life: 0.25, size: 22, color: 'rgba(255,140,50,0.8)', shape: 'glow' });
+      for (let i = 0; i < 4; i++) {
+        this.addParticle({ x: event.targetX + rand(-10, 10), y: event.targetY + rand(-6, 6), vx: rand(-20, 20), vy: rand(-60, -25), life: rand(0.3, 0.5), size: rand(2, 3.5), color: pick(['#ff9f45', '#ffd97a']), shape: 'fire', drag: 1.5 });
+      }
+    } else if (t === 'mage') {
+      this.addParticle({ x: event.x + ux * 10, y: event.y - 22 + uy * 10, x2: event.targetX, y2: event.targetY, vx: 0, vy: 0, life: 0.16, size: 3, color: '#c9bfff', shape: 'tracer' });
+      this.addParticle({ x: event.targetX, y: event.targetY, vx: 0, vy: 0, life: 0.18, size: 14, color: 'rgba(185,167,255,0.9)', shape: 'glow' });
+      for (let i = 0; i < 6; i++) {
+        const a = rand(0, Math.PI * 2);
+        this.addParticle({ x: event.targetX, y: event.targetY, vx: Math.cos(a) * rand(30, 80), vy: Math.sin(a) * rand(30, 80), life: rand(0.25, 0.45), size: rand(1.4, 2.6), color: pick(['#b9a7ff', '#e6dcff', '#ffffff']), shape: 'star', spin: rand(-6, 6), drag: 2 });
+      }
+    } else {
+      // Melee: a bright slash arc and sparks where steel meets hide.
+      const color = t === 'paladin' ? '#c6ff6b' : '#ffffff';
+      this.addParticle({ x: event.x + ux * 12, y: event.y - 10 + uy * 12, x2: event.targetX, y2: event.targetY - 6, vx: 0, vy: 0, life: 0.12, size: 3, color, shape: 'tracer' });
+      for (let i = 0; i < 5; i++) {
+        this.addParticle({ x: event.targetX, y: event.targetY - 4, vx: rand(-70, 70), vy: rand(-80, -20), life: rand(0.15, 0.3), size: rand(1.2, 2.2), color: i % 2 ? color : '#ffd97a', shape: 'spark', gravity: 200 });
+      }
+      if (t === 'paladin') {
+        this.addParticle({ x: event.x, y: event.y - 12, vx: 0, vy: -20, life: 0.4, size: 6, color: 'rgba(143,211,58,0.5)', shape: 'glow', grow: 2 });
+      }
+    }
+  }
+
+  spawnHeroAbility(event) {
+    const t = event.heroType;
+    const r = event.radius;
+    this.addText(event.x, event.y - 30, event.name, '#ffd98a', 1.3);
+    if (t === 'dragon') {
+      this.addFlash('#3a1000', 0.25);
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: r, color: 'rgba(255,120,40,0.9)', shape: 'ring' });
+      for (let i = 0; i < 40; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7 - rand(40, 90), vx: rand(-10, 10), vy: rand(140, 220), life: rand(0.35, 0.6), size: rand(3, 6), color: pick(['#ff9a3a', '#ff7a2a', '#ffc45a', '#ff5a1f']), shape: 'fire', grow: 1.4 });
+      }
+      for (let i = 0; i < 10; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addGroundParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, life: rand(2, 4), size: rand(5, 9), color: 'rgba(30,20,15,0.45)', shape: 'scorch' });
+      }
+      this.shake = Math.max(this.shake, 4);
+    } else if (t === 'knight') {
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: r, color: 'rgba(255,255,255,0.9)', shape: 'ring' });
+      for (let i = 0; i < 18; i++) {
+        const a = (i / 18) * Math.PI * 2;
+        this.addParticle({ x: event.x + Math.cos(a) * 10, y: event.y - 8 + Math.sin(a) * 6, vx: Math.cos(a) * rand(120, 220), vy: Math.sin(a) * rand(70, 140), life: rand(0.2, 0.35), size: rand(1.5, 2.5), color: i % 2 ? '#ffffff' : '#9fc3ff', shape: 'spark', drag: 2 });
+      }
+      this.shake = Math.max(this.shake, 2.5);
+    } else if (t === 'mage') {
+      this.addFlash('#102040', 0.2);
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.6, size: r, color: 'rgba(143,211,255,0.9)', shape: 'ring' });
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: r * 0.6, color: 'rgba(223,243,255,0.8)', shape: 'glow' });
+      for (let i = 0; i < 30; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(10, r);
+        this.addParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: rand(-10, 10), vy: rand(-40, -15), life: rand(0.5, 1), size: rand(1.2, 2.4), color: '#ffffff', shape: 'flake', spin: rand(-5, 5), drag: 1 });
+      }
+      for (let i = 0; i < 8; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addGroundParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: 0, vy: 0, life: rand(2, 3.5), size: rand(8, 14), color: 'rgba(191,233,255,0.45)', shape: 'frostpatch' });
+      }
+    } else {
+      this.addFlash('#102a10', 0.2);
+      this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: r, color: 'rgba(198,255,107,0.9)', shape: 'ring' });
+      this.addGroundParticle({ x: event.x, y: event.y + 4, vx: 0, vy: 0, life: 2.5, size: r * 0.8, color: 'rgba(143,211,58,0.25)', shape: 'puddle' });
+      for (let i = 0; i < 26; i++) {
+        const a = rand(0, Math.PI * 2);
+        const d = rand(0, r);
+        this.addParticle({ x: event.x + Math.cos(a) * d, y: event.y + Math.sin(a) * d * 0.7, vx: 0, vy: rand(-70, -30), life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#c6ff6b', '#8fd33a', '#ffffff']), shape: 'ember', drag: 0.5 });
+      }
+      for (let i = 0; i < 6; i++) {
+        this.addParticle({ x: event.x + rand(-8, 8), y: event.y - 10, vx: 0, vy: rand(-40, -20), life: 0.8, size: 2, color: '#9bff9b', shape: 'star' });
+      }
+    }
+  }
+
+  spawnHeroDeath(event) {
+    this.setBanner('Hero down', '#e25555', `returns in ${event.respawn}s`);
+    this.addFlash('#300000', 0.2);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 30, color: 'rgba(226,85,85,0.9)', shape: 'ring' });
+    for (let i = 0; i < 14; i++) {
+      this.addParticle({ x: event.x, y: event.y - 8, vx: rand(-40, 40), vy: rand(-90, -30), life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#e25555', '#ffffff', '#ffd97a']), shape: 'ember', gravity: 120 });
+    }
+  }
+
+  spawnHeroReturn(event) {
+    this.addText(event.x, event.y - 24, 'Hero returns!', '#ffd98a', 1.1);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 24, color: 'rgba(255,217,138,0.9)', shape: 'ring' });
+    this.addParticle({ x: event.x, y: event.y - 10, vx: 0, vy: 0, life: 0.4, size: 20, color: 'rgba(255,240,200,0.8)', shape: 'glow' });
+    for (let i = 0; i < 12; i++) {
+      this.addParticle({ x: event.x + rand(-10, 10), y: event.y + rand(-4, 4), vx: 0, vy: rand(-80, -30), life: rand(0.5, 0.9), size: rand(1.2, 2.2), color: '#ffd98a', shape: 'star', spin: 3 });
+    }
+  }
+
+  spawnHeroLevel(event) {
+    this.addText(event.x, event.y - 28, `Level ${event.level}!`, '#ffd700', 1.4);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.5, size: 28, color: '#ffd700', shape: 'ring' });
+    for (let i = 0; i < 16; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y - 8, vx: Math.cos(a) * rand(30, 90), vy: Math.sin(a) * rand(30, 90) - 40, life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#ffd700', '#ffffff', '#ffd98a']), shape: 'star', spin: rand(-6, 6), gravity: 80 });
+    }
   }
 
   // Thermal shock: fire meets ice. Frost ring, steam, shards, damage text.

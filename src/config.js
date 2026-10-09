@@ -366,3 +366,46 @@ export const ENEMY_TYPES = {
     summons: { at: 0.5, type: 'fireImp', count: 10 },
   },
 };
+
+// --- Heroes ----------------------------------------------------------------------
+// One hero joins each level. Click the hero, then click the map to move.
+//   style    'melee' heroes block up to `block` enemies that reach them;
+//            'ranged' heroes shoot from `range` and never block.
+//   ability  triggered by the player, centred on the hero, on a cooldown.
+// Per-level growth: +25% hp and damage per hero level (max HERO_MAX_LEVEL).
+export const HERO_MAX_LEVEL = 3;
+export const HERO_XP_LEVELS = [80, 240, 520]; // bounty earned from hero kills
+export const HERO_TYPES = {
+  dragon: {
+    id: 'dragon', name: 'Ember Drake', title: 'Flying fire-breather',
+    desc: 'Hovers above the fight, breathing fire that splashes and burns.',
+    color: '#ff6b35', style: 'ranged', hp: 260, speed: 120, range: 110, damage: 18, damageType: 'physical',
+    element: 'fire', attackInterval: 0.6, splash: 28, burn: { dps: 8, duration: 2.5 }, respawn: 16,
+    ability: { name: 'Firestorm', key: 'Q', cooldown: 24, radius: 105, damage: 110, element: 'fire', burn: { dps: 14, duration: 4 },
+      desc: 'Rains fire on everything around the drake.' },
+  },
+  knight: {
+    id: 'knight', name: 'Sir Aldric', title: 'Armoured knight',
+    desc: 'Holds the line: blocks up to three enemies and cleaves them with his greatsword.',
+    color: '#4a6fa5', style: 'melee', hp: 520, speed: 85, range: 26, damage: 26, damageType: 'physical',
+    attackInterval: 0.8, block: 3, cleave: 2, armor: 0.3, respawn: 14,
+    ability: { name: 'Whirlwind', key: 'Q', cooldown: 20, radius: 62, damage: 80, stun: 1.6,
+      desc: 'Spins through everything around him, stunning what survives.' },
+  },
+  mage: {
+    id: 'mage', name: 'Ilyria', title: 'Archmage of frost',
+    desc: 'Hurls arcane bolts from range; her Frost Nova freezes a crowd in place.',
+    color: '#8f7bff', style: 'ranged', hp: 220, speed: 90, range: 120, damage: 30, damageType: 'magic',
+    element: 'arcane', attackInterval: 0.9, respawn: 16,
+    ability: { name: 'Frost Nova', key: 'Q', cooldown: 22, radius: 135, damage: 45, element: 'ice', slow: { factor: 0.3, duration: 4.5 },
+      desc: 'Chills every enemy around her to a crawl.' },
+  },
+  paladin: {
+    id: 'paladin', name: 'Mordrek', title: 'Skeleton paladin',
+    desc: 'An undead champion who blocks the road and drinks the life he takes.',
+    color: '#8fd33a', style: 'melee', hp: 420, speed: 80, range: 26, damage: 22, damageType: 'physical',
+    attackInterval: 0.7, block: 2, lifesteal: 0.35, armor: 0.2, respawn: 10,
+    ability: { name: 'Consecration', key: 'Q', cooldown: 24, radius: 100, damage: 70, damageType: 'true', stun: 2, heal: 0.4,
+      desc: 'Holy ground scorches and stuns nearby foes and mends his bones.' },
+  },
+};

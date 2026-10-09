@@ -44,6 +44,7 @@ export function render(ctx, game, effects, ui, time) {
   drawDecorations(ctx, scene.decor, level.theme, time);
   drawTowers(ctx, game, ui, time);
   drawEnemies(ctx, game, time);
+  drawHero(ctx, game, ui, time);
   drawProjectiles(ctx, game);
   drawBeams(ctx, game, time);
   drawFlameJets(ctx, game, time);
@@ -3978,6 +3979,558 @@ function drawBolts(ctx, bolts) {
   ctx.globalAlpha = 1;
 }
 
+// --- Hero -----------------------------------------------------------------------
+
+function drawHero(ctx, game, ui, time) {
+  const hero = game.hero;
+  if (!hero) return;
+  if (!hero.alive) return;
+  const type = game.heroTypes[hero.typeId];
+  const x = hero.x;
+  const y = hero.y;
+  const moving = hero.targetX !== null;
+  const stride = moving ? Math.sin(time * 14) : 0;
+  const bob = type.style === 'ranged' && hero.typeId === 'dragon' ? Math.sin(time * 5) * 3 + 14 : Math.abs(stride) * 2;
+
+  // Move marker.
+  if (ui.marker) {
+    const k = ui.marker.life / 0.8;
+    ctx.strokeStyle = `rgba(255,217,138,${k})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(ui.marker.x, ui.marker.y, 10 * (1.6 - k * 0.6), 4.5 * (1.6 - k * 0.6), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ui.marker.x - 4, ui.marker.y);
+    ctx.lineTo(ui.marker.x + 4, ui.marker.y);
+    ctx.moveTo(ui.marker.x, ui.marker.y - 2);
+    ctx.lineTo(ui.marker.x, ui.marker.y + 2);
+    ctx.stroke();
+  }
+  // Selection ring and ability radius hint.
+  if (ui.heroSelected) {
+    ctx.strokeStyle = `rgba(255,217,138,${0.7 + Math.sin(time * 6) * 0.25})`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = -time * 20;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 4, 18, 8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255,217,138,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, type.ability.radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  // Shadow.
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 5, 12 - bob * 0.15, 4.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(x, y - bob);
+  ctx.scale(hero.facing, 1);
+  const swing = hero.swing > 0 ? Math.max(0, Math.sin(Math.min(1, hero.swing / 0.25) * Math.PI)) : 0;
+  if (hero.typeId === 'dragon') drawHeroDragon(ctx, time, swing, stride);
+  else if (hero.typeId === 'knight') drawHeroKnight(ctx, time, swing, stride);
+  else if (hero.typeId === 'mage') drawHeroMage(ctx, time, swing, stride);
+  else drawHeroPaladin(ctx, time, swing, stride);
+  ctx.restore();
+
+  // Health bar and level pips.
+  const w = 30;
+  const frac = Math.max(0, hero.hp / hero.maxHp);
+  const by = y - bob - 34 - (hero.typeId === 'dragon' ? 6 : 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(x - w / 2 - 1, by - 1, w + 2, 5);
+  ctx.fillStyle = frac > 0.5 ? '#8fb273' : frac > 0.25 ? '#e2b84a' : '#e25555';
+  ctx.fillRect(x - w / 2, by, w * frac, 3);
+  ctx.fillStyle = '#ffd700';
+  for (let p = 0; p <= hero.level; p++) {
+    ctx.beginPath();
+    ctx.arc(x - hero.level * 3 + p * 6, by - 4, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Ember Drake: a red winged drake hovering above the field, wings beating,
+// tail curling, embers at the maw.
+function drawHeroDragon(ctx, time, swing, stride) {
+  const flap = Math.sin(time * 9);
+  // Wings (behind).
+  const wing = (side) => {
+    ctx.save();
+    ctx.scale(1, 1);
+    const g = ctx.createLinearGradient(0, -8, 0, 10);
+    g.addColorStop(0, '#c8402a');
+    g.addColorStop(1, '#6e1c12');
+    ctx.fillStyle = g;
+    ctx.strokeStyle = '#4a120c';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-2, -4);
+    ctx.quadraticCurveTo(-10 * side, -16 - flap * 6, -22 * side, -10 - flap * 8);
+    ctx.lineTo(-19 * side, -2 - flap * 3);
+    ctx.lineTo(-23 * side, 4 - flap * 2);
+    ctx.lineTo(-14 * side, 2);
+    ctx.lineTo(-16 * side, 9);
+    ctx.quadraticCurveTo(-8 * side, 4, -2, 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.moveTo(-3, -2);
+    ctx.lineTo(-19 * side, -2 - flap * 3);
+    ctx.moveTo(-3, 0);
+    ctx.lineTo(-14 * side, 2);
+    ctx.stroke();
+    ctx.restore();
+  };
+  wing(-1);
+  // Tail.
+  ctx.strokeStyle = '#a8321f';
+  ctx.lineWidth = 3.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-6, 4);
+  ctx.quadraticCurveTo(-16, 8 + Math.sin(time * 3) * 3, -22, 2 + Math.sin(time * 4) * 4);
+  ctx.stroke();
+  ctx.fillStyle = '#6e1c12';
+  ctx.beginPath();
+  ctx.moveTo(-22, 2 + Math.sin(time * 4) * 4);
+  ctx.lineTo(-27, -1 + Math.sin(time * 4) * 4);
+  ctx.lineTo(-25, 5 + Math.sin(time * 4) * 4);
+  ctx.closePath();
+  ctx.fill();
+  // Body.
+  ctx.fillStyle = domeGradient(ctx, 0, 0, 11, '#ff8a5a', '#c8402a', '#6e1c12');
+  ctx.strokeStyle = '#4a120c';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 11, 8.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Belly scales.
+  ctx.fillStyle = '#f5c56a';
+  ctx.beginPath();
+  ctx.ellipse(2, 3, 7, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,70,20,0.5)';
+  ctx.lineWidth = 0.8;
+  for (let k = -1; k <= 1; k++) {
+    ctx.beginPath();
+    ctx.moveTo(-3 + k * 3.5, 1.5);
+    ctx.lineTo(-3 + k * 3.5, 5.5);
+    ctx.stroke();
+  }
+  // Back spines.
+  ctx.fillStyle = '#6e1c12';
+  for (let k = 0; k < 4; k++) {
+    ctx.beginPath();
+    ctx.moveTo(-7 + k * 3.5, -7);
+    ctx.lineTo(-5.5 + k * 3.5, -11);
+    ctx.lineTo(-4 + k * 3.5, -7);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Head with horns, eye, maw.
+  ctx.fillStyle = domeGradient(ctx, 11, -4, 6.5, '#ff8a5a', '#c8402a', '#6e1c12');
+  ctx.strokeStyle = '#4a120c';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(11, -4, 7, 5.5, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#f5e6c4';
+  for (const [hx, hy] of [[7, -8], [10, -9]]) {
+    ctx.beginPath();
+    ctx.moveTo(hx - 1.2, hy);
+    ctx.lineTo(hx + 1, hy - 5);
+    ctx.lineTo(hx + 2, hy);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.arc(13, -5.5, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1a0a08';
+  ctx.beginPath();
+  ctx.ellipse(13.4, -5.5, 0.6, 1.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Maw, open while breathing fire.
+  ctx.fillStyle = '#4a120c';
+  ctx.beginPath();
+  ctx.moveTo(15, -2.5);
+  ctx.lineTo(19, -2 + swing * 2);
+  ctx.lineTo(15, 0.5 + swing * 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, 18, -1, 5 + swing * 6, `rgba(255,140,50,${0.5 + swing * 0.4})`);
+  if (swing > 0.1) drawFlameTongue(ctx, 18, -1, 0, 10 + swing * 10, 4, time, 1);
+  ctx.globalCompositeOperation = 'source-over';
+  wing(1);
+}
+
+// Sir Aldric: plate armour, blue tabard, kite shield, greatsword that swings.
+function drawHeroKnight(ctx, time, swing, stride) {
+  // Legs.
+  ctx.strokeStyle = '#4a4f55';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-3, 2);
+  ctx.lineTo(-4 - stride * 3, 9);
+  ctx.moveTo(3, 2);
+  ctx.lineTo(4 + stride * 3, 9);
+  ctx.stroke();
+  // Cape.
+  ctx.fillStyle = '#2a4c80';
+  ctx.beginPath();
+  ctx.moveTo(-5, -12);
+  ctx.quadraticCurveTo(-14 - Math.sin(time * 3) * 2, -2, -10 - Math.sin(time * 3) * 3, 8);
+  ctx.lineTo(-2, 4);
+  ctx.closePath();
+  ctx.fill();
+  // Torso: plate with tabard.
+  ctx.fillStyle = cylinderGradient(ctx, -8, 8, '#5c6268', '#c9ced4', '#aab1b8');
+  ctx.strokeStyle = '#2e3338';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, -8, -13, 16, 17, 4);
+  ctx.fillStyle = '#4a6fa5';
+  ctx.beginPath();
+  ctx.moveTo(-4, -12);
+  ctx.lineTo(4, -12);
+  ctx.lineTo(3, 3);
+  ctx.lineTo(0, 5);
+  ctx.lineTo(-3, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(2, -4);
+  ctx.lineTo(0, -1);
+  ctx.lineTo(-2, -4);
+  ctx.closePath();
+  ctx.fill();
+  // Pauldrons.
+  ctx.fillStyle = domeGradient(ctx, -8, -11, 4, '#e0e4e8', '#aab1b8', '#5c6268');
+  ctx.beginPath();
+  ctx.arc(-8, -11, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = domeGradient(ctx, 8, -11, 4, '#e0e4e8', '#aab1b8', '#5c6268');
+  ctx.beginPath();
+  ctx.arc(8, -11, 4.2, 0, Math.PI * 2);
+  ctx.fill();
+  // Shield on the off hand.
+  const sg = ctx.createLinearGradient(-14, -10, -6, 2);
+  sg.addColorStop(0, '#6f93c9');
+  sg.addColorStop(1, '#2a4c80');
+  ctx.fillStyle = sg;
+  ctx.strokeStyle = '#c9ced4';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-14, -10);
+  ctx.lineTo(-6, -10);
+  ctx.lineTo(-6, -1);
+  ctx.quadraticCurveTo(-10, 5, -14, -1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.arc(-10, -5, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  // Helmet with visor and plume.
+  ctx.fillStyle = domeGradient(ctx, 0, -19, 6.5, '#e8ecf0', '#aab1b8', '#5c6268');
+  ctx.strokeStyle = '#2e3338';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(0, -19, 6.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#1b1f24';
+  ctx.fillRect(1, -20.5, 6, 2.2);
+  ctx.strokeStyle = '#5c6268';
+  ctx.lineWidth = 0.8;
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    ctx.moveTo(2 + k * 1.8, -17.5);
+    ctx.lineTo(2 + k * 1.8, -14.5);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#b8323a';
+  ctx.beginPath();
+  ctx.moveTo(-2, -25);
+  ctx.quadraticCurveTo(-8 - Math.sin(time * 4) * 2, -30, -12, -22);
+  ctx.quadraticCurveTo(-6, -24, -1, -22);
+  ctx.closePath();
+  ctx.fill();
+  // Greatsword: raised, swings down on attack.
+  ctx.save();
+  ctx.translate(8, -6);
+  ctx.rotate(-0.9 + swing * 1.9);
+  ctx.strokeStyle = '#5a4322';
+  ctx.lineWidth = 2.6;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(0, 6);
+  ctx.stroke();
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(-4, -1.2, 8, 2.2);
+  const bg = ctx.createLinearGradient(-1.5, 0, 1.5, 0);
+  bg.addColorStop(0, '#9aa1a8');
+  bg.addColorStop(0.5, '#ffffff');
+  bg.addColorStop(1, '#8a9198');
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.moveTo(-1.8, -1.5);
+  ctx.lineTo(1.8, -1.5);
+  ctx.lineTo(1.2, -20);
+  ctx.lineTo(0, -23);
+  ctx.lineTo(-1.2, -20);
+  ctx.closePath();
+  ctx.fill();
+  if (swing > 0.2) {
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(255,255,255,${swing * 0.7})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, -1.6, -0.2);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.restore();
+}
+
+// Ilyria: violet robes, pointed hat, staff topped with a glowing crystal.
+function drawHeroMage(ctx, time, swing, stride) {
+  // Robe hem and body.
+  const rg = ctx.createLinearGradient(-9, -14, 9, 8);
+  rg.addColorStop(0, '#5a4fcf');
+  rg.addColorStop(1, '#2b2650');
+  ctx.fillStyle = rg;
+  ctx.strokeStyle = '#1e1a3a';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-6, -13);
+  ctx.lineTo(6, -13);
+  ctx.quadraticCurveTo(9, 0, 10 + stride * 2, 9);
+  ctx.lineTo(-10 - stride * 2, 9);
+  ctx.quadraticCurveTo(-9, 0, -6, -13);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Sash and runes.
+  ctx.fillStyle = '#e2b84a';
+  ctx.fillRect(-7, -4, 14, 2);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(185,167,255,${0.5 + Math.sin(time * 3) * 0.3})`;
+  ctx.lineWidth = 1;
+  for (const [rx, ry] of [[-3, 2], [3, 4], [0, -8]]) {
+    ctx.beginPath();
+    ctx.moveTo(rx - 1.5, ry - 1.5);
+    ctx.lineTo(rx + 1.5, ry + 1.5);
+    ctx.moveTo(rx + 1.5, ry - 1.5);
+    ctx.lineTo(rx - 1.5, ry + 1.5);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // Head and hat.
+  ctx.fillStyle = '#e7c9a3';
+  ctx.beginPath();
+  ctx.arc(0, -17, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#7a4a3a';
+  ctx.beginPath();
+  ctx.moveTo(-4.5, -16);
+  ctx.quadraticCurveTo(-7, -8, -5, -4);
+  ctx.lineTo(-3, -12);
+  ctx.closePath();
+  ctx.fill();
+  const hg = ctx.createLinearGradient(-9, -20, 9, -20);
+  hg.addColorStop(0, '#2b2650');
+  hg.addColorStop(0.5, '#5a4fcf');
+  hg.addColorStop(1, '#2b2650');
+  ctx.fillStyle = hg;
+  ctx.strokeStyle = '#1e1a3a';
+  ctx.beginPath();
+  ctx.ellipse(0, -20, 10, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-6, -20);
+  ctx.quadraticCurveTo(-1, -30, 3 + Math.sin(time * 2) * 1.5, -36);
+  ctx.quadraticCurveTo(3, -28, 6, -20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#e2b84a';
+  ctx.fillRect(-5, -22.5, 10, 1.6);
+  // Staff with crystal; raised when casting.
+  ctx.save();
+  ctx.translate(8, -4);
+  ctx.rotate(-0.2 - swing * 0.6);
+  ctx.strokeStyle = '#5a4322';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, 12);
+  ctx.lineTo(0, -16);
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, 0, -19, 8 + swing * 6, `rgba(143,123,255,${0.45 + swing * 0.4})`);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = domeGradient(ctx, 0, -19, 3.5, '#ffffff', '#c9bfff', '#8f7bff');
+  ctx.beginPath();
+  ctx.moveTo(0, -23.5);
+  ctx.lineTo(3, -19);
+  ctx.lineTo(0, -14.5);
+  ctx.lineTo(-3, -19);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  // Orbiting motes.
+  ctx.fillStyle = '#e6dcff';
+  for (let k = 0; k < 3; k++) {
+    const a = time * 2.5 + (k / 3) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 13, -10 + Math.sin(a) * 5, 1.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Mordrek: bone-white skeleton in blackened plate, green tabard, flanged mace,
+// eyes burning green.
+function drawHeroPaladin(ctx, time, swing, stride) {
+  // Legs (bone).
+  ctx.strokeStyle = '#e9e2d0';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-3, 2);
+  ctx.lineTo(-4 - stride * 3, 9);
+  ctx.moveTo(3, 2);
+  ctx.lineTo(4 + stride * 3, 9);
+  ctx.stroke();
+  // Tattered cape.
+  ctx.fillStyle = '#1f2a1a';
+  ctx.beginPath();
+  ctx.moveTo(-5, -12);
+  ctx.quadraticCurveTo(-14 - Math.sin(time * 3) * 2, -2, -11 - Math.sin(time * 3) * 3, 8);
+  ctx.lineTo(-8, 4);
+  ctx.lineTo(-6, 7);
+  ctx.lineTo(-2, 3);
+  ctx.closePath();
+  ctx.fill();
+  // Blackened plate torso with green tabard.
+  ctx.fillStyle = cylinderGradient(ctx, -8, 8, '#1b1f24', '#5c6268', '#3a3f45');
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, -8, -13, 16, 17, 4);
+  ctx.fillStyle = '#3f7a35';
+  ctx.beginPath();
+  ctx.moveTo(-4, -12);
+  ctx.lineTo(4, -12);
+  ctx.lineTo(3, 3);
+  ctx.lineTo(0, 5);
+  ctx.lineTo(-3, 3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#c6ff6b';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, -9);
+  ctx.lineTo(0, -1);
+  ctx.moveTo(-2.5, -6);
+  ctx.lineTo(2.5, -6);
+  ctx.stroke();
+  // Spiked pauldrons.
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = domeGradient(ctx, side * 8, -11, 4, '#8a9198', '#4a4f55', '#1b1f24');
+    ctx.beginPath();
+    ctx.arc(side * 8, -11, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#e9e2d0';
+    ctx.beginPath();
+    ctx.moveTo(side * 9, -14);
+    ctx.lineTo(side * 11, -19);
+    ctx.lineTo(side * 7, -14.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Skull with burning eyes.
+  ctx.fillStyle = domeGradient(ctx, 0, -19, 6, '#ffffff', '#e9e2d0', '#a89f88');
+  ctx.strokeStyle = '#6b6354';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, -19.5, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#e9e2d0';
+  ctx.fillRect(-3.5, -15, 7, 3);
+  ctx.strokeStyle = '#6b6354';
+  ctx.lineWidth = 0.7;
+  for (let k = -2; k <= 2; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * 1.5, -15);
+    ctx.lineTo(k * 1.5, -12);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#1b1f24';
+  ctx.beginPath();
+  ctx.ellipse(-2.3, -20, 1.8, 2.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(2.3, -20, 1.8, 2.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, -2.3, -20, 3.5, `rgba(143,255,80,${0.7 + Math.sin(time * 8) * 0.2})`);
+  glowDisc(ctx, 2.3, -20, 3.5, `rgba(143,255,80,${0.7 + Math.sin(time * 8 + 1) * 0.2})`);
+  ctx.globalCompositeOperation = 'source-over';
+  // Crown of bone.
+  ctx.fillStyle = '#a89f88';
+  for (let k = -1; k <= 1; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * 3.5 - 1.2, -24);
+    ctx.lineTo(k * 3.5, -28);
+    ctx.lineTo(k * 3.5 + 1.2, -24);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Flanged mace: swings on attack.
+  ctx.save();
+  ctx.translate(8, -6);
+  ctx.rotate(-0.8 + swing * 1.8);
+  ctx.strokeStyle = '#3a3f45';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(0, 4);
+  ctx.lineTo(0, -14);
+  ctx.stroke();
+  ctx.fillStyle = domeGradient(ctx, 0, -17, 4, '#8a9198', '#4a4f55', '#1b1f24');
+  ctx.beginPath();
+  ctx.arc(0, -17, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8a9198';
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 3, -17 + Math.sin(a) * 3);
+    ctx.lineTo(Math.cos(a) * 6.5, -17 + Math.sin(a) * 6.5);
+    ctx.lineTo(Math.cos(a + 0.5) * 3, -17 + Math.sin(a + 0.5) * 3);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, 0, -17, 7 + swing * 6, `rgba(143,255,80,${0.3 + swing * 0.5})`);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+
 // --- Enemies: sprite composer ------------------------------------------------
 
 function drawEnemies(ctx, game, time) {
@@ -4075,6 +4628,16 @@ function drawEnemies(ctx, game, time) {
 
     // Trait visuals: elemental aura, regeneration pulse, energy shield, rage.
     drawEnemyTraits(ctx, enemy, x, y, pos, r, time);
+    if (enemy.stun > 0) {
+      // Dizzy stars circling the head.
+      ctx.fillStyle = '#ffd700';
+      for (let k = 0; k < 3; k++) {
+        const a = time * 6 + (k / 3) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * r * 0.9, y - r * 1.3 + Math.sin(a) * 2.5, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
 
     // White hit-flash overlay while enemy.flash runs down.
     if (enemy.flash > 0) {

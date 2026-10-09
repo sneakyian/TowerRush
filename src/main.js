@@ -1,13 +1,15 @@
 // Browser entry point: wires the Game to the canvas and the HUD, handles
 // level selection and saved progress.
 
-import { TOWER_TYPES, MAX_TOWER_LEVEL } from './config.js';
+import { TOWER_TYPES, MAX_TOWER_LEVEL, HERO_TYPES } from './config.js';
 import { LEVELS } from './levels.js';
 import { Game, PHASE, describeTraits } from './game.js';
 import { Effects } from './effects.js';
 import { render } from './render.js';
 
 const PROGRESS_KEY = 'towerrush-progress';
+const HERO_KEY = 'towerrush-hero';
+const HERO_ICONS = { dragon: '🐉', knight: '🛡️', mage: '🔮', paladin: '💀' };
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -40,7 +42,7 @@ fitCanvas();
 window.addEventListener('resize', fitCanvas);
 if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => fitCanvas()).observe(stageEl);
 const effects = new Effects();
-const ui = { selectedSpot: -1 };
+const ui = { selectedSpot: -1, heroSelected: false, marker: null };
 
 // --- Saved progress (best effort; storage may be unavailable) -----------
 
@@ -59,6 +61,20 @@ function saveUnlocked(n) {
   } catch {
     /* storage unavailable: progress just isn't remembered */
   }
+}
+
+function loadHeroChoice() {
+  try {
+    const id = localStorage.getItem(HERO_KEY);
+    return HERO_TYPES[id] ? id : 'knight';
+  } catch {
+    return 'knight';
+  }
+}
+let heroChoice = loadHeroChoice();
+function saveHeroChoice(id) {
+  heroChoice = id;
+  try { localStorage.setItem(HERO_KEY, id); } catch { /* not remembered */ }
 }
 
 // --- HUD elements -------------------------------------------------------
@@ -141,27 +157,88 @@ canvas.addEventListener('click', (event) => {
   const x = (event.clientX - rect.left) * (game.level.width / rect.width);
   const y = (event.clientY - rect.top) * (game.level.height / rect.height);
 
-  ui.selectedSpot = -1;
-  game.level.buildSpots.forEach((spot, i) => {
-    if (Math.hypot(spot.x - x, spot.y - y) <= 22) ui.selectedSpot = i;
+  // Hero first: click it to select, then click the ground to send it there.
+  const hero = game.hero;
+  if (hero && hero.alive && Math.hypot(hero.x - x, hero.y - y) <= 20) {
+    ui.heroSelected = !ui.heroSelected;
+    ui.selectedSpot = -1;
+    updateHud();
+    return;
+  }
+  let spot = -1;
+  game.level.buildSpots.forEach((s, i) => {
+    if (Math.hypot(s.x - x, s.y - y) <= 22) spot = i;
   });
+  if (spot < 0 && ui.heroSelected && hero && hero.alive) {
+    game.commandHero(x, y);
+    ui.marker = { x, y, life: 0.8 };
+    return;
+  }
+  ui.selectedSpot = spot;
+  ui.heroSelected = false;
   updateHud();
 });
+
+// Hero ability: button or Q.
+const heroPanel = document.getElementById('hero-panel');
+const heroPortraitEl = document.getElementById('hero-portrait');
+const heroNameEl = document.getElementById('hero-name');
+const heroHpFill = document.getElementById('hero-hp-fill');
+const heroLevelEl = document.getElementById('hero-level');
+const heroAbilityBtn = document.getElementById('hero-ability');
+heroAbilityBtn.addEventListener('click', () => { game.useHeroAbility(); updateHeroPanel(); });
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'q' || e.key === 'Q') { game.useHeroAbility(); updateHeroPanel(); }
+});
+
+function updateHeroPanel() {
+  const hero = game.hero;
+  heroPanel.hidden = !hero;
+  if (!hero) return;
+  const type = HERO_TYPES[hero.typeId];
+  heroPortraitEl.textContent = HERO_ICONS[hero.typeId] || '⭐';
+  heroNameEl.textContent = hero.alive ? type.name : `${type.name} returns in ${Math.ceil(hero.respawn)}s`;
+  heroHpFill.style.width = `${Math.round((hero.hp / hero.maxHp) * 100)}%`;
+  heroLevelEl.textContent = `Lv ${hero.level + 1}`;
+  const cd = hero.abilityCooldown;
+  heroAbilityBtn.disabled = !hero.alive || cd > 0;
+  heroAbilityBtn.textContent = cd > 0 ? `${type.ability.name} (${Math.ceil(cd)}s)` : `${type.ability.name} (Q)`;
+  heroAbilityBtn.title = type.ability.desc;
+}
 
 // --- Level flow -----------------------------------------------------------
 
 function loadLevel(index) {
   levelIndex = Math.min(Math.max(index, 0), LEVELS.length - 1);
   game = new Game(LEVELS[levelIndex]);
+  game.setHero(heroChoice);
   fitCanvas();
   effects.clear();
   ui.selectedSpot = -1;
+  ui.heroSelected = false;
+  ui.marker = null;
   levelSelect.hidden = true;
   updateHud();
+  updateHeroPanel();
+}
+
+const heroList = document.getElementById('hero-list');
+function renderHeroPicker() {
+  heroList.replaceChildren();
+  for (const hero of Object.values(HERO_TYPES)) {
+    const btn = document.createElement('button');
+    btn.className = `hero-btn${hero.id === heroChoice ? ' selected' : ''}`;
+    btn.style.setProperty('--hero', hero.color);
+    btn.title = `${hero.desc} Ability: ${hero.ability.name} — ${hero.ability.desc}`;
+    btn.innerHTML = `<span class="hero-icon">${HERO_ICONS[hero.id] || '⭐'}</span><strong>${hero.name}</strong><small>${hero.title}</small><small>${hero.ability.name}</small>`;
+    btn.addEventListener('click', () => { saveHeroChoice(hero.id); renderHeroPicker(); });
+    heroList.appendChild(btn);
+  }
 }
 
 function showLevelSelect() {
   const unlocked = loadUnlocked();
+  renderHeroPicker();
   levelList.replaceChildren();
   LEVELS.forEach((level, i) => {
     const btn = document.createElement('button');
@@ -262,6 +339,7 @@ function updateHud() {
 // --- Game loop ----------------------------------------------------------
 
 let lastTime = performance.now();
+let heroPanelTimer = 0;
 function frame(now) {
   // Clamp dt so a background tab doesn't fast-forward the simulation.
   const dt = Math.min((now - lastTime) / 1000, 0.05);
@@ -280,6 +358,15 @@ function frame(now) {
   }
   if (game.phase !== phaseBefore || game.gold !== goldBefore || game.lives !== livesBefore) {
     updateHud();
+  }
+  if (ui.marker) {
+    ui.marker.life -= dt;
+    if (ui.marker.life <= 0) ui.marker = null;
+  }
+  heroPanelTimer += dt;
+  if (heroPanelTimer > 0.1) {
+    heroPanelTimer = 0;
+    updateHeroPanel();
   }
   render(ctx, game, effects, ui, now / 1000);
   requestAnimationFrame(frame);

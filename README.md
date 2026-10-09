@@ -29,6 +29,23 @@ from the sources with `npm run build`.)
   castle costs 1 life, heavy brutes (orcs, yetis, trolls, golems) cost 2,
   and the **boss** on the final wave costs 5.
 
+### Heroes
+
+Pick a hero on the level screen. Click the hero, then click the map to send
+it there; it fights on its own, and **Q** (or the ability button) fires its
+special. Heroes level up from their own kills, and fall back to the castle
+gate to return after a short wait if they die.
+
+| Hero                | Style                                                        | Ability                                              |
+| ------------------- | ------------------------------------------------------------ | ---------------------------------------------------- |
+| **Ember Drake**     | Flying; fire breath that splashes and burns                   | **Firestorm**: rains fire on everything around it    |
+| **Sir Aldric**      | Armoured knight; blocks three enemies and cleaves two         | **Whirlwind**: hits and stuns everything around him  |
+| **Ilyria**          | Archmage; arcane bolts from range                             | **Frost Nova**: slows every nearby enemy to a crawl  |
+| **Mordrek**         | Skeleton paladin; blocks two enemies, heals as he hits        | **Consecration**: scorches and stuns, mends his bones |
+
+Melee heroes hold the enemies that reach them (bosses shove straight
+through); enemies fight back, so pull a hurt hero out of the line.
+
 ### Towers
 
 Eleven towers, each with **four upgrade tiers**. Physical damage is reduced
@@ -97,7 +114,7 @@ play.html        Generated single-file build (npm run build)
 src/config.js    Tower tiers and the full enemy roster (stats + sprite look)
 src/levels.js    The five levels: paths, spots, water, themes, waves
 src/path.js      Polyline path addressed by distance
-src/game.js      Core simulation (no DOM — runs in Node for tests)
+src/game.js      Core simulation incl. heroes (no DOM — runs in Node for tests)
 src/effects.js   Particles, floating text, banners (no DOM)
 src/render.js    Canvas drawing: terrain, animated water/trees/clouds, sprites
 src/main.js      Browser wiring: input, HUD, level flow, saved progress
