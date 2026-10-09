@@ -184,11 +184,13 @@ export const TOWER_TYPES = {
     color: '#ffd166',
     // boost: damage multiplier granted to towers within `range` of the beacon.
     // Boosts from several beacons do not stack; the strongest applies.
+    // Build spots sit 100-240px apart, so a fresh beacon needs ~180 range
+    // to reach its neighbours at all.
     levels: [
-      { cost: 130, range: 90, boost: 1.2 },
-      { cost: 220, range: 100, boost: 1.3 },
-      { cost: 330, range: 110, boost: 1.4 },
-      { cost: 460, range: 120, boost: 1.55 },
+      { cost: 130, range: 180, boost: 1.2 },
+      { cost: 220, range: 200, boost: 1.3 },
+      { cost: 330, range: 220, boost: 1.4 },
+      { cost: 460, range: 240, boost: 1.55 },
     ],
   },
 };
