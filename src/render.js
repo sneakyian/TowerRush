@@ -4545,7 +4545,7 @@ function drawEnemies(ctx, game, time) {
     const look = type.look || { body: 'round', features: [] };
     const has = (f) => look.features.includes(f);
     const stride = Math.sin(enemy.dist * 0.25);
-    const floating = look.body === 'wisp';
+    const floating = look.body === 'wisp' || !!enemy.flying;
     const bob = floating ? Math.sin(time * 4 + enemy.id) * 3 + 6 : Math.abs(stride) * 2.5;
     const x = pos.x;
     const y = pos.y - bob;
@@ -4595,12 +4595,14 @@ function drawEnemies(ctx, game, time) {
     if (has('crown')) drawCrown(ctx, x, y, r);
     if (has('hat')) drawHat(ctx, x, y, r, facing);
     if (has('flame')) drawFlame(ctx, x, y, r, time, enemy.id);
+    if (has('staff')) drawStaff(ctx, x, y, r, facing, time);
 
     // Face.
     if (has('wolf')) drawWolfFace(ctx, type.color, x, y, r, facing);
     else if (has('frog')) drawFrogFace(ctx, x, y, r, facing);
     else drawEyes(ctx, x, y, r, facing, !floating);
 
+    if (has('mask')) drawMask(ctx, x, y, r, facing);
     if (has('tusks')) drawTusks(ctx, x, y, r);
     if (has('tooth')) drawTooth(ctx, x, y, r, facing);
     if (has('club')) drawClub(ctx, x, y, r, facing);
@@ -4628,6 +4630,7 @@ function drawEnemies(ctx, game, time) {
 
     // Trait visuals: elemental aura, regeneration pulse, energy shield, rage.
     drawEnemyTraits(ctx, enemy, x, y, pos, r, time);
+    drawEnemyAbilities(ctx, enemy, type, x, y, pos, r, facing, time);
     if (enemy.stun > 0) {
       // Dizzy stars circling the head.
       ctx.fillStyle = '#ffd700';
@@ -4668,60 +4671,149 @@ function hexToRgba(hex, alpha) {
 }
 
 function drawBody(ctx, color, x, y, r, heavy) {
-  ctx.fillStyle = color;
-  ctx.strokeStyle = heavy ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = heavy ? 2.5 : 1.5;
+  // Shaded sphere: lit from the upper left, darker toward the belly, with a
+  // thin rim light along the lower edge and a bold ink outline.
+  const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r * 1.05);
+  g.addColorStop(0, lighten(color, 0.35));
+  g.addColorStop(0.55, color);
+  g.addColorStop(1, darken(color, 0.4));
+  ctx.fillStyle = g;
+  ctx.strokeStyle = heavy ? 'rgba(10,10,20,0.75)' : 'rgba(10,10,20,0.6)';
+  ctx.lineWidth = heavy ? 2.6 : 1.8;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(x, y + r * 0.25, r * 0.85, 0.3, Math.PI - 0.3);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.arc(x, y, r * 0.86, Math.PI * 0.2, Math.PI * 0.8);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
   ctx.beginPath();
-  ctx.arc(x - r * 0.3, y - r * 0.35, r * 0.4, 0, Math.PI * 2);
+  ctx.ellipse(x - r * 0.35, y - r * 0.4, r * 0.3, r * 0.2, -0.6, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawLongBody(ctx, color, x, y, r, facing) {
-  ctx.fillStyle = color;
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.lineWidth = 1.5;
+  const g = ctx.createRadialGradient(x - r * 0.2, y - r * 0.4, r * 0.1, x, y, r * 1.3);
+  g.addColorStop(0, lighten(color, 0.3));
+  g.addColorStop(0.6, color);
+  g.addColorStop(1, darken(color, 0.4));
+  ctx.fillStyle = g;
+  ctx.strokeStyle = 'rgba(10,10,20,0.6)';
+  ctx.lineWidth = 1.8;
   ctx.beginPath();
   ctx.ellipse(x, y, r * 1.25, r * 0.85, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = 'rgba(0,0,0,0.14)';
+  // Haunch and ribs shading.
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
   ctx.beginPath();
-  ctx.ellipse(x, y + r * 0.3, r * 1.05, r * 0.5, 0, 0, Math.PI);
+  ctx.ellipse(x - r * 0.6 * facing, y + r * 0.1, r * 0.5, r * 0.55, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.ellipse(x + r * 0.6 * facing, y + r * 0.1, r * 0.45, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y, r * 1.08, r * 0.7, 0, Math.PI * 0.15, Math.PI * 0.85);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.55 * facing, y - r * 0.2, r * 0.4, r * 0.25, 0, 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawWispBody(ctx, color, x, y, r, time, id) {
   const flicker = 0.75 + Math.sin(time * 9 + id) * 0.15;
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x, y, r * 1.9, hexToRgba(color, 0.35 * flicker));
+  ctx.globalCompositeOperation = 'source-over';
+  // Trailing wisps of body behind, fading.
+  for (let i = 3; i >= 1; i--) {
+    ctx.globalAlpha = flicker * (0.5 - i * 0.12);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x + Math.sin(time * 6 + i + id) * r * 0.2, y + r * 0.5 * i, r * (1 - i * 0.22), 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.globalAlpha = flicker;
-  ctx.fillStyle = color;
+  const g = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.05, x, y, r);
+  g.addColorStop(0, '#ffffff');
+  g.addColorStop(0.4, lighten(color, 0.3));
+  g.addColorStop(1, hexToRgba(color, 0.55));
+  ctx.fillStyle = g;
   ctx.beginPath();
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fill();
-  // Trailing wisps of body behind.
-  for (let i = 1; i <= 3; i++) {
-    ctx.globalAlpha = flicker * (0.5 - i * 0.12);
-    ctx.beginPath();
-    ctx.arc(x, y + r * 0.5 * i, r * (1 - i * 0.22), 0, Math.PI * 2);
-    ctx.fill();
-  }
   ctx.globalAlpha = 1;
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+}
+
+// Colour helpers for shading sprites.
+function lighten(hex, k) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgb(${Math.round(r + (255 - r) * k)},${Math.round(g + (255 - g) * k)},${Math.round(b + (255 - b) * k)})`;
+}
+function darken(hex, k) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgb(${Math.round(r * (1 - k))},${Math.round(g * (1 - k))},${Math.round(b * (1 - k))})`;
+}
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// Shaman's crooked staff with a skull and a trailing feather.
+function drawStaff(ctx, x, y, r, facing, time) {
+  const sx = x - r * 0.9 * facing;
+  ctx.strokeStyle = '#5a3c14';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.arc(x - r * 0.25, y - r * 0.3, r * 0.4, 0, Math.PI * 2);
+  ctx.moveTo(sx, y + r * 0.8);
+  ctx.quadraticCurveTo(sx - r * 0.3 * facing, y - r * 0.4, sx + r * 0.1 * facing, y - r * 1.5);
+  ctx.stroke();
+  ctx.fillStyle = '#e9e2d0';
+  ctx.beginPath();
+  ctx.arc(sx + r * 0.1 * facing, y - r * 1.65, r * 0.32, 0, Math.PI * 2);
   ctx.fill();
+  ctx.fillStyle = '#1b1f24';
+  ctx.beginPath();
+  ctx.arc(sx + r * 0.02 * facing, y - r * 1.7, r * 0.08, 0, Math.PI * 2);
+  ctx.arc(sx + r * 0.2 * facing, y - r * 1.7, r * 0.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#c84a3a';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(sx + r * 0.1 * facing, y - r * 1.4);
+  ctx.quadraticCurveTo(sx - r * 0.3 * facing, y - r * 1.2 + Math.sin(time * 5) * 1.5, sx - r * 0.5 * facing, y - r * 0.9);
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, sx + r * 0.1 * facing, y - r * 1.65, r * 0.7, `rgba(140,255,120,${0.35 + Math.sin(time * 4) * 0.15})`);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// A painted war mask over the face.
+function drawMask(ctx, x, y, r, facing) {
+  ctx.fillStyle = '#e9d9a8';
+  ctx.strokeStyle = '#5a3c14';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.25 * facing, y - r * 0.15, r * 0.62, r * 0.7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#1b1f24';
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.45 * facing, y - r * 0.25, r * 0.18, r * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#c84a3a';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x + r * 0.1 * facing, y - r * 0.6);
+  ctx.lineTo(x + r * 0.25 * facing, y + r * 0.35);
+  ctx.moveTo(x - r * 0.1 * facing, y - r * 0.1);
+  ctx.lineTo(x + r * 0.7 * facing, y - r * 0.1);
+  ctx.stroke();
 }
 
 function drawEyes(ctx, x, y, r, facing, angry) {
@@ -5607,6 +5699,60 @@ function drawEnemyTraits(ctx, enemy, x, y, pos, r, time) {
   }
 }
 
+function drawEnemyAbilities(ctx, enemy, type, x, y, pos, r, facing, time) {
+  // Healer: a soft green pulse and a floating rune.
+  if (type.heal) {
+    const pulse = (time * 0.8 + enemy.id * 0.2) % 1;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(140,255,120,${0.45 * (1 - pulse)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(pos.x, pos.y + r * 0.4, type.heal.radius * pulse, type.heal.radius * pulse * 0.45, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // Freshly healed: a rising green cross.
+  if (enemy.healed > 0) {
+    ctx.strokeStyle = `rgba(140,255,120,${enemy.healed * 2.5})`;
+    ctx.lineWidth = 1.5;
+    const hy = y - r * 1.5 - (0.3 - enemy.healed) * 20;
+    ctx.beginPath();
+    ctx.moveTo(x - 2.5, hy);
+    ctx.lineTo(x + 2.5, hy);
+    ctx.moveTo(x, hy - 2.5);
+    ctx.lineTo(x, hy + 2.5);
+    ctx.stroke();
+  }
+  // Charging: speed lines streaking behind.
+  if (enemy.charged) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 1.2;
+    for (let k = 0; k < 3; k++) {
+      const ly = y - r * 0.4 + k * r * 0.4;
+      const len = r * (0.8 + ((time * 9 + k) % 1) * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(x - r * 1.1 * facing, ly);
+      ctx.lineTo(x - (r * 1.1 + len) * facing, ly);
+      ctx.stroke();
+    }
+  }
+  // Evasive: a faint afterimage offset behind.
+  if (enemy.dodge > 0) {
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(x - r * 0.35 * facing, y, r * 0.95, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  // Explosive: a sputtering fuse glow.
+  if (type.explode) {
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(ctx, x, y + r * 0.3, r * 0.9, `rgba(255,120,40,${0.25 + Math.sin(time * 14 + enemy.id) * 0.15})`);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+}
+
 function drawBossBar(ctx, game) {
   const boss = game.boss;
   if (!boss) return;
@@ -5651,6 +5797,19 @@ function drawBossBar(ctx, game) {
 }
 
 function drawBanner(ctx, effects, level) {
+  if (effects.taunt) {
+    // Boss dialogue, under the boss bar.
+    ctx.save();
+    ctx.globalAlpha = effects.tauntAlpha;
+    ctx.font = 'italic 13px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillStyle = '#ffe6b0';
+    ctx.strokeText(effects.taunt.text, level.width / 2, 58);
+    ctx.fillText(effects.taunt.text, level.width / 2, 58);
+    ctx.restore();
+  }
   const banner = effects.banner;
   if (!banner) return;
   const age = banner.maxLife - banner.life;

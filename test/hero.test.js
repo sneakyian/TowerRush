@@ -20,6 +20,13 @@ function makeGame() {
   }, { enemyTypes: ENEMIES });
 }
 
+// Stand the hero somewhere and make that its post, so guard duty keeps it there.
+function place(game, x, y) {
+  game.hero.x = x;
+  game.hero.y = y;
+  game.hero.post = { x, y };
+}
+
 function run(game, seconds, step = 0.05) {
   for (let t = 0; t < seconds - 1e-9; t += step) game.update(step);
 }
@@ -40,7 +47,7 @@ test('the hero starts by the castle gate and walks to a move order', () => {
 test('a melee hero blocks enemies that reach it and cuts them down', () => {
   const game = makeGame();
   game.setHero('knight');
-  game.hero.x = 300; game.hero.y = 100; // standing on the road
+  place(game, 300, 100);
   const enemy = game.spawnEnemy('grunt', 230);
   run(game, 1); // walks the 30px to the knight's reach, then stops
   const held = enemy.dist;
@@ -55,12 +62,12 @@ test('a melee hero blocks enemies that reach it and cuts them down', () => {
 test('bosses are never blocked, and a hero that loses the fight dies and respawns', () => {
   const game = makeGame();
   game.setHero('knight');
-  game.hero.x = 300; game.hero.y = 100;
+  place(game, 300, 100);
   const boss = game.spawnEnemy('king', 280);
   run(game, 1);
   assert.ok(boss.dist > 300, 'boss walked straight through');
   const brute = game.spawnEnemy('brute', 290);
-  game.hero.x = brute ? 320 : 320;
+  place(game, 320, 100);
   run(game, 4);
   assert.ok(!game.hero.alive, 'knight falls to a 200-dps brute');
   assert.ok(game.events.some((e) => e.type === 'hero-died'));
@@ -73,7 +80,7 @@ test('bosses are never blocked, and a hero that loses the fight dies and respawn
 test('a ranged hero shoots from range and splashes burn (drake)', () => {
   const game = makeGame();
   game.setHero('dragon');
-  game.hero.x = 300; game.hero.y = 180; // 80px off the road: in range, out of reach
+  place(game, 300, 180);
   const a = game.spawnEnemy('grunt', 300);
   const b = game.spawnEnemy('grunt', 310);
   run(game, 0.1);
@@ -86,7 +93,7 @@ test('a ranged hero shoots from range and splashes burn (drake)', () => {
 test('the archmage frost nova slows everyone around her and goes on cooldown', () => {
   const game = makeGame();
   game.setHero('mage');
-  game.hero.x = 300; game.hero.y = 160;
+  place(game, 300, 160);
   const near = game.spawnEnemy('brute', 300);
   const far = game.spawnEnemy('brute', 50);
   const result = game.useHeroAbility();
@@ -101,13 +108,13 @@ test('the archmage frost nova slows everyone around her and goes on cooldown', (
 test('stunned enemies stand still, then walk on', () => {
   const game = makeGame();
   game.setHero('knight');
-  game.hero.x = 300; game.hero.y = 140;
+  place(game, 300, 140);
   const enemy = game.spawnEnemy('brute', 290);
   game.useHeroAbility(); // whirlwind: 1.6s stun
   const at = enemy.dist;
   run(game, 1);
   assert.equal(enemy.dist, at, 'stunned');
-  game.hero.x = 10; // walk away so it isn't blocked afterwards
+  place(game, 10, 10); // walk away so it isn't blocked afterwards
   run(game, 2);
   assert.ok(enemy.dist > at, 'moving again');
 });

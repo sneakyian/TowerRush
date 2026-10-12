@@ -42,6 +42,7 @@ export class Effects {
   }
 
   clear() {
+    this.taunt = null;
     this.particles = [];
     this.groundParticles = [];
     this.texts = [];
@@ -66,6 +67,11 @@ export class Effects {
         case 'boss-summons': this.spawnSummons(event); break;
         case 'boss-enraged': this.spawnEnrage(event); break;
         case 'shatter': this.spawnShatter(event); break;
+        case 'dodge': this.addText(event.x, event.y - 14, 'Miss', '#ffffff', 0.8); break;
+        case 'charge': this.spawnCharge(event); break;
+        case 'blink': this.spawnBlink(event); break;
+        case 'split': this.spawnSplit(event); break;
+        case 'explode': this.spawnExplosion(event.x, event.y, 0.8, event.radius); break;
         case 'hero-attack': this.spawnHeroAttack(event); break;
         case 'hero-ability': this.spawnHeroAbility(event); break;
         case 'hero-died': this.spawnHeroDeath(event); break;
@@ -564,6 +570,7 @@ export class Effects {
   spawnBossArrival(event) {
     const traits = event.traits && event.traits.length ? event.traits.join(' · ') : 'approaches';
     this.setBanner(event.name, '#ff6b6b', traits);
+    if (event.taunt) this.taunt = { text: event.taunt, life: 7, maxLife: 7 };
     this.shake = Math.max(this.shake, 5);
     this.addFlash('#3a0000', 0.35);
   }
@@ -590,6 +597,35 @@ export class Effects {
       this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(60, 160), vy: Math.sin(a) * rand(60, 160), life: rand(0.3, 0.6), size: rand(2, 4), color: pick(['#ff3b2f', '#ff9f45', '#ffd97a']), shape: 'fire', drag: 2 });
     }
     this.shake = Math.max(this.shake, 4);
+  }
+
+  // --- Enemy abilities -------------------------------------------------------------
+
+  spawnCharge(event) {
+    this.addText(event.x, event.y - 16, 'Charge!', '#ff7a45', 0.9);
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.3, size: 18, color: 'rgba(255,120,60,0.9)', shape: 'ring' });
+    for (let i = 0; i < 6; i++) {
+      this.addGroundParticle({ x: event.x + rand(-6, 6), y: event.y + 4, vx: rand(-20, 20), vy: rand(-14, -4), life: rand(0.3, 0.5), size: rand(2, 3.5), color: '#b8a67e', shape: 'smoke', grow: 1.4 });
+    }
+  }
+
+  spawnBlink(event) {
+    for (const [px, py] of [[event.x, event.y], [event.toX, event.toY]]) {
+      this.addParticle({ x: px, y: py, vx: 0, vy: 0, life: 0.2, size: 14, color: 'rgba(168,255,200,0.9)', shape: 'glow' });
+      for (let i = 0; i < 5; i++) {
+        this.addParticle({ x: px + rand(-6, 6), y: py + rand(-6, 6), vx: rand(-20, 20), vy: rand(-30, -10), life: rand(0.3, 0.5), size: rand(1, 2), color: '#c8ffe0', shape: 'star', spin: 4 });
+      }
+    }
+    this.addParticle({ x: event.x, y: event.y, x2: event.toX, y2: event.toY, vx: 0, vy: 0, life: 0.15, size: 2.5, color: 'rgba(168,255,200,0.8)', shape: 'tracer' });
+  }
+
+  spawnSplit(event) {
+    this.addText(event.x, event.y - 16, 'Splits!', '#d9b36c', 0.9);
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y, vx: Math.cos(a) * rand(30, 110), vy: Math.sin(a) * rand(30, 110) - 40, life: rand(0.35, 0.6), size: rand(2, 4), color: pick(['#d9b36c', '#b98f4e', '#f3dca0']), shape: 'shard', spin: rand(-10, 10), gravity: 260 });
+    }
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: -10, life: 0.6, size: 10, color: 'rgba(217,179,108,0.5)', shape: 'smoke', grow: 2 });
   }
 
   // --- Hero -------------------------------------------------------------------
@@ -838,6 +874,13 @@ export class Effects {
     this.banner = { text, color, sub, life: 2.2, maxLife: 2.2 };
   }
 
+  // A line of boss dialogue shown under the boss bar.
+  get tauntAlpha() {
+    if (!this.taunt) return 0;
+    const age = this.taunt.maxLife - this.taunt.life;
+    return Math.max(0, Math.min(1, age * 2, this.taunt.life));
+  }
+
   addFlash(color, alpha) {
     if (!this.flash || alpha > this.flash.alpha) this.flash = { color, alpha };
   }
@@ -845,6 +888,10 @@ export class Effects {
   // --- Integration ------------------------------------------------------------------
 
   update(dt) {
+    if (this.taunt) {
+      this.taunt.life -= dt;
+      if (this.taunt.life <= 0) this.taunt = null;
+    }
     for (const list of [this.particles, this.groundParticles]) {
       for (const p of list) {
         p.life -= dt;

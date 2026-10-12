@@ -44,6 +44,13 @@ export function describeTraits(type) {
   if (type.shield) out.push('Shielded');
   if (type.element) out.push(`${type.element[0].toUpperCase()}${type.element.slice(1)}`);
   if (type.weakTo) out.push(`Weak to ${type.weakTo}`);
+  if (type.flying) out.push('Flying');
+  if (type.dodge) out.push('Evasive');
+  if (type.heal) out.push('Healer');
+  if (type.charge) out.push('Charges');
+  if (type.split) out.push('Splits');
+  if (type.explode) out.push('Explodes');
+  if (type.blink) out.push('Blinks');
   if (type.summons) out.push('Summons');
   if (type.enrage) out.push('Enrages');
   return out;
@@ -238,6 +245,11 @@ export class Game {
       summoned: false,
       stun: 0, // seconds frozen in place by a hero ability
       blocked: false, // held in melee by the hero this tick
+      // Abilities.
+      flying: !!type.flying,
+      dodge: type.dodge || 0,
+      charged: false,
+      blinkTimer: type.blink ? type.blink.cooldown : 0,
     };
     this.enemies.push(enemy);
     const pos = this.path.positionAt(dist);
@@ -247,6 +259,7 @@ export class Game {
   }
 
   moveEnemies(dt) {
+    this.tick = (this.tick || 0) + 1; // healers may only mend a given enemy once per tick
     for (const enemy of this.enemies) {
       if (!enemy.alive) continue;
       enemy.flash = Math.max(0, (enemy.flash || 0) - dt);
@@ -283,9 +296,42 @@ export class Game {
           }
         }
       }
+      const type = this.enemyTypes[enemy.typeId];
+      // Charge: a wounded brute breaks into a run.
+      if (type.charge && !enemy.charged && enemy.hp < enemy.maxHp * 0.5) {
+        enemy.charged = true;
+        enemy.speed = type.speed * type.charge * (enemy.enraged ? ENRAGE_SPEED : 1);
+        const pos = this.path.positionAt(enemy.dist);
+        this.pushEvent({ type: 'charge', x: pos.x, y: pos.y, enemyType: enemy.typeId });
+      }
       if (enemy.stun > 0) {
         enemy.stun = Math.max(0, enemy.stun - dt);
         continue;
+      }
+      // Healers mend everyone around them (never themselves).
+      if (type.heal) {
+        const pos = this.path.positionAt(enemy.dist);
+        for (const other of this.enemies) {
+          if (other === enemy || !other.alive || other.hp >= other.maxHp || other.healTick === this.tick) continue;
+          const op = this.path.positionAt(other.dist);
+          if (Math.hypot(op.x - pos.x, op.y - pos.y) <= type.heal.radius) {
+            other.hp = Math.min(other.maxHp, other.hp + type.heal.hps * dt);
+            other.healed = 0.3; // for the renderer
+            other.healTick = this.tick; // healing does not stack across healers
+          }
+        }
+      }
+      if (enemy.healed > 0) enemy.healed -= dt;
+      // Blink: wisps leap along the road.
+      if (type.blink && !enemy.blocked) {
+        enemy.blinkTimer -= dt;
+        if (enemy.blinkTimer <= 0) {
+          enemy.blinkTimer = type.blink.cooldown;
+          const from = this.path.positionAt(enemy.dist);
+          enemy.dist = Math.min(this.path.totalLength - 1, enemy.dist + type.blink.distance);
+          const to = this.path.positionAt(enemy.dist);
+          this.pushEvent({ type: 'blink', x: from.x, y: from.y, toX: to.x, toY: to.y, enemyType: enemy.typeId });
+        }
       }
       if (enemy.blocked) continue; // held in melee by the hero
       enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
@@ -337,7 +383,7 @@ export class Game {
 
       tower.cooldown = Math.max(0, tower.cooldown - dt);
       if (tower.cooldown > 0) continue;
-      const target = this.findTarget(spot, stats.range, { minRange: stats.minRange, mode: type.targeting });
+      const target = this.findTarget(spot, stats.range, { minRange: stats.minRange, mode: type.targeting, ground: type.targets === 'ground' });
       if (!target) continue;
 
       const pos = this.path.positionAt(target.dist);
@@ -366,6 +412,7 @@ export class Game {
           poison: stats.poison || null,
           color: type.color,
           element: type.element || null,
+          ground: type.targets === 'ground',
           towerType: tower.typeId,
           towerLevel: tower.level,
           dirX: 0,
@@ -474,9 +521,10 @@ export class Game {
   // Kingdom Rush convention: shoot the enemy furthest along the path in range.
   // `mode: 'toughest'` instead picks the highest-HP enemy; `minRange` skips
   // enemies that are too close (mortars).
-  findTarget(from, range, { minRange = 0, mode = 'furthest' } = {}) {
+  findTarget(from, range, { minRange = 0, mode = 'furthest', ground = false } = {}) {
     let best = null;
     for (const enemy of this.enemies) {
+      if (ground && enemy.flying) continue;
       if (!enemy.alive) continue;
       const pos = this.path.positionAt(enemy.dist);
       const d = Math.hypot(pos.x - from.x, pos.y - from.y);
@@ -534,6 +582,7 @@ export class Game {
         if (!enemy.alive) continue;
         const pos = this.path.positionAt(enemy.dist);
         if (Math.hypot(pos.x - proj.x, pos.y - proj.y) <= proj.splashRadius + enemy.radius) {
+          if (proj.ground && enemy.flying) continue;
           this.damageEnemy(enemy, proj.damage, proj.damageType, { armorPierce: proj.armorPierce, element: proj.element });
           if (proj.slow) this.applySlow(enemy, proj.slow);
           if (proj.poison) this.applyPoison(enemy, proj.poison);
@@ -550,6 +599,11 @@ export class Game {
     if (!enemy.alive) return;
     const type = this.enemyTypes[enemy.typeId];
     const weak = element && enemy.weakTo === element ? WEAKNESS_MULTIPLIER : 1;
+    if (damageType === 'physical' && enemy.dodge > 0 && flash && Math.random() < enemy.dodge) {
+      const pos = this.path.positionAt(enemy.dist);
+      this.pushEvent({ type: 'dodge', x: pos.x, y: pos.y, enemyType: enemy.typeId });
+      return;
+    }
     if (flash) enemy.flash = 0.12;
     // An energy shield takes the hit instead of the body.
     if (enemy.shield && enemy.shield.hp > 0) {
@@ -571,6 +625,18 @@ export class Game {
       this.gold += enemy.bounty;
       if (source === 'hero') this.grantHeroXp(enemy.bounty);
       const pos = this.path.positionAt(enemy.dist);
+      if (type.split) {
+        for (let i = 0; i < type.split.count; i++) this.spawnEnemy(type.split.type, Math.max(0, enemy.dist - 6 + i * 12));
+        this.pushEvent({ type: 'split', x: pos.x, y: pos.y, enemyType: enemy.typeId, count: type.split.count });
+      }
+      if (type.explode) {
+        this.pushEvent({ type: 'explode', x: pos.x, y: pos.y, radius: type.explode.radius });
+        const hero = this.hero;
+        if (hero && hero.alive && Math.hypot(hero.x - pos.x, hero.y - pos.y) <= type.explode.radius) {
+          hero.hp = Math.max(0, hero.hp - type.explode.damage);
+          if (hero.hp <= 0) this.killHero();
+        }
+      }
       this.pushEvent({
         type: 'enemy-died',
         x: pos.x,
@@ -635,8 +701,10 @@ export class Game {
       level: 0,
       xp: 0,
       alive: true,
-      targetX: null, // move order
+      targetX: null, // where it is walking to (a player order or its own pursuit)
       targetY: null,
+      ordered: false, // true while walking to a player's order
+      post: { x: gate.x, y: gate.y }, // the spot it guards
       cooldown: 0,
       abilityCooldown: 0,
       respawn: 0,
@@ -658,7 +726,21 @@ export class Game {
     if (!hero || !hero.alive) return { ok: false };
     hero.targetX = Math.min(Math.max(x, 8), this.level.width - 8);
     hero.targetY = Math.min(Math.max(y, 8), this.level.height - 8);
+    hero.ordered = true;
+    hero.post = { x: hero.targetX, y: hero.targetY };
     return { ok: true };
+  }
+
+  killHero() {
+    const hero = this.hero;
+    const stats = this.heroStats(hero);
+    hero.hp = 0;
+    hero.alive = false;
+    hero.respawn = stats.respawn;
+    hero.targetX = hero.targetY = null;
+    hero.ordered = false;
+    for (const enemy of this.enemies) enemy.blocked = false;
+    this.pushEvent({ type: 'hero-died', x: hero.x, y: hero.y, heroType: hero.typeId, respawn: stats.respawn });
   }
 
   grantHeroXp(amount) {
@@ -691,13 +773,42 @@ export class Game {
       hero.respawn -= dt;
       if (hero.respawn <= 0) {
         const gate = this.path.positionAt(Math.max(0, this.path.totalLength - 46));
-        Object.assign(hero, { alive: true, hp: hero.maxHp, x: gate.x, y: gate.y, targetX: null, targetY: null, engaged: 0 });
+        Object.assign(hero, { alive: true, hp: hero.maxHp, x: gate.x, y: gate.y, targetX: null, targetY: null, ordered: false, engaged: 0, post: { x: gate.x, y: gate.y } });
         this.pushEvent({ type: 'hero-respawned', x: hero.x, y: hero.y, heroType: hero.typeId });
       }
       return;
     }
     const stats = this.heroStats(hero);
-    // Walk toward the move order.
+    const melee = stats.style === 'melee';
+    // Who is around? Melee heroes cannot reach fliers at all.
+    const near = [];
+    for (const enemy of this.enemies) {
+      if (!enemy.alive || (melee && enemy.flying)) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      near.push({ enemy, pos, d: Math.hypot(pos.x - hero.x, pos.y - hero.y) });
+    }
+    near.sort((a, b) => b.enemy.dist - a.enemy.dist); // furthest along first
+    // Guard duty: with no standing order, chase anything that comes near the
+    // post, and walk back to the post once the road is clear.
+    if (!hero.ordered) {
+      const guard = stats.guard || (melee ? 110 : 130);
+      const threat = near.find((n) => Math.hypot(n.pos.x - hero.post.x, n.pos.y - hero.post.y) <= guard);
+      if (threat) {
+        const want = melee ? stats.range + threat.enemy.radius : stats.range * 0.8;
+        if (threat.d > want) {
+          hero.targetX = threat.pos.x;
+          hero.targetY = threat.pos.y;
+        } else {
+          hero.targetX = hero.targetY = null;
+        }
+      } else if (Math.hypot(hero.post.x - hero.x, hero.post.y - hero.y) > 3) {
+        hero.targetX = hero.post.x;
+        hero.targetY = hero.post.y;
+      } else {
+        hero.targetX = hero.targetY = null;
+      }
+    }
+    // Walk.
     if (hero.targetX !== null) {
       const dx = hero.targetX - hero.x;
       const dy = hero.targetY - hero.y;
@@ -707,43 +818,33 @@ export class Game {
         hero.x = hero.targetX;
         hero.y = hero.targetY;
         hero.targetX = hero.targetY = null;
+        hero.ordered = false;
       } else {
         hero.x += (dx / dist) * step;
         hero.y += (dy / dist) * step;
         if (Math.abs(dx) > 1) hero.facing = dx > 0 ? 1 : -1;
       }
+      for (const n of near) n.d = Math.hypot(n.pos.x - hero.x, n.pos.y - hero.y);
     }
-    // Who is close enough to fight?
-    const moving = hero.targetX !== null;
-    const near = [];
-    for (const enemy of this.enemies) {
-      if (!enemy.alive) continue;
-      const pos = this.path.positionAt(enemy.dist);
-      near.push({ enemy, pos, d: Math.hypot(pos.x - hero.x, pos.y - hero.y) });
-    }
-    near.sort((a, b) => b.enemy.dist - a.enemy.dist); // furthest along first
+    const moving = hero.targetX !== null && hero.ordered; // a player's order; pursuit still fights
     // Melee heroes hold enemies that reach them (bosses shove through) and
     // take their blows; enemies brushing past a ranged hero hit it too.
     let engaged = 0;
-    const reach = stats.style === 'melee' ? stats.range + 6 : 20;
+    const reach = melee ? stats.range + 6 : 20;
     for (const n of near) {
       if (n.d > reach + n.enemy.radius) continue;
-      if (stats.style === 'melee' && !moving && !n.enemy.boss && engaged < stats.block) n.enemy.blocked = true;
+      if (melee && !moving && !n.enemy.boss && engaged < stats.block) n.enemy.blocked = true;
       engaged += 1;
       hero.hp -= this.enemyAttack(n.enemy) * (1 - (stats.armor || 0)) * dt;
     }
     hero.engaged = engaged;
     if (hero.hp <= 0) {
-      hero.hp = 0;
-      hero.alive = false;
-      hero.respawn = stats.respawn;
-      for (const enemy of this.enemies) enemy.blocked = false;
-      this.pushEvent({ type: 'hero-died', x: hero.x, y: hero.y, heroType: hero.typeId, respawn: stats.respawn });
+      this.killHero();
       return;
     }
     // Attack.
     if (hero.cooldown > 0 || moving) return;
-    const attackReach = stats.style === 'melee' ? reach : stats.range; // melee swings at whatever it holds
+    const attackReach = melee ? reach : stats.range; // melee swings at whatever it holds
     const inRange = near.filter((n) => n.d <= attackReach + n.enemy.radius);
     if (!inRange.length) return;
     const target = inRange[0];

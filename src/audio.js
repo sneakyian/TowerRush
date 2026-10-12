@@ -32,7 +32,7 @@ export const MUSIC_THEMES = {
 const RATE_LIMITS = {
   archerShot: 0.05, mageShot: 0.08, cannonShot: 0.12, mortarShot: 0.25, sniperShot: 0.15, frostShot: 0.08,
   venomShot: 0.1, hit: 0.04, explosion: 0.08, zap: 0.1, death: 0.05, coin: 0.1, click: 0.03, frostHit: 0.08,
-  venomHit: 0.08, heroSwing: 0.1, heroBreath: 0.15, heroBolt: 0.12, shieldBreak: 0.1, shatter: 0.15,
+  venomHit: 0.08, dodge: 0.1, charge: 0.2, blink: 0.1, split: 0.2, heroSwing: 0.1, heroBreath: 0.15, heroBolt: 0.12, shieldBreak: 0.1, shatter: 0.15,
 };
 const MAX_VOICES = 28;
 
@@ -199,6 +199,11 @@ export class SoundSystem {
         case 'boss-summons': this.cue('summons'); break;
         case 'boss-enraged': this.cue('roar'); break;
         case 'shatter': this.cue('shatter', { x: e.x }); break;
+        case 'charge': this.cue('charge', { x: e.x }); break;
+        case 'blink': this.cue('blink', { x: e.x }); break;
+        case 'split': this.cue('split', { x: e.x }); break;
+        case 'explode': this.cue('explosion', { x: e.x }); break;
+        case 'dodge': this.cue('dodge', { x: e.x }); break;
         case 'shield-broken': this.cue('shieldBreak', { x: e.x }); break;
         case 'game-won': this.cue('victory'); break;
         case 'game-lost': this.cue('defeat'); break;
@@ -475,6 +480,21 @@ const CUES = {
   shieldBreak: (s, t, o) => {
     s.tone({ type: 'triangle', freq: 1800, freqEnd: 500, t0: t, dur: 0.22, gain: 0.1, x: o.x });
     s.noise({ t0: t, dur: 0.2, gain: 0.12, filter: 'bandpass', freq: 4000, q: 1.5, x: o.x });
+  },
+  charge: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.3, gain: 0.12, filter: 'bandpass', freq: 600, freqEnd: 1400, q: 0.8, x: o.x });
+    s.tone({ type: 'sawtooth', freq: 120, freqEnd: 240, t0: t, dur: 0.25, gain: 0.08, x: o.x });
+  },
+  blink: (s, t, o) => {
+    s.tone({ type: 'sine', freq: 1200, freqEnd: 2600, t0: t, dur: 0.14, gain: 0.06, x: o.x });
+    s.tone({ type: 'sine', freq: 2600, freqEnd: 1400, t0: t + 0.1, dur: 0.14, gain: 0.05, x: o.x });
+  },
+  split: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.3, gain: 0.18, filter: 'lowpass', freq: 2000, freqEnd: 300, x: o.x });
+    s.tone({ type: 'triangle', freq: 200, freqEnd: 80, t0: t, dur: 0.25, gain: 0.1, x: o.x });
+  },
+  dodge: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.08, gain: 0.07, filter: 'bandpass', freq: 3000, freqEnd: 5000, q: 1, x: o.x });
   },
   // Enemies and the castle.
   death: (s, t, o) => {

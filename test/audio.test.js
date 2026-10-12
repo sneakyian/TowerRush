@@ -11,7 +11,8 @@ import { LEVELS } from '../src/levels.js';
 function fakeContext() {
   const log = { oscillators: 0, noises: 0, starts: [] };
   const param = () => ({ value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {}, setTargetAtTime() {}, linearRampToValueAtTime() {} });
-  const node = (extra = {}) => ({ connect() {}, disconnect() {}, gain: param(), frequency: param(), detune: param(), Q: param(), pan: param(), ...extra });
+  // Voices end instantly here (a real context fires onended when playback stops).
+  const node = (extra = {}) => ({ connect() {}, disconnect() {}, gain: param(), frequency: param(), detune: param(), Q: param(), pan: param(), set onended(fn) { fn(); }, ...extra });
   const ctx = {
     currentTime: 0,
     sampleRate: 8000,

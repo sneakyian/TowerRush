@@ -42,6 +42,7 @@ export const TOWER_TYPES = {
   },
   cannon: {
     id: 'cannon',
+    targets: 'ground', // cannot reach flying enemies
     name: 'Cannon Tower',
     desc: 'Splash damage for packed groups.',
     damageType: 'physical',
@@ -57,6 +58,7 @@ export const TOWER_TYPES = {
   },
   mortar: {
     id: 'mortar',
+    targets: 'ground', // cannot reach flying enemies
     name: 'Mortar',
     desc: 'Lobs shells across the map with a huge blast, but cannot hit anything close.',
     damageType: 'physical',
@@ -126,6 +128,7 @@ export const TOWER_TYPES = {
   },
   flame: {
     id: 'flame',
+    targets: 'ground', // cannot reach flying enemies
     element: 'fire',
     name: 'Flamethrower',
     desc: 'Short-range fire that leaves enemies burning.',
@@ -208,6 +211,15 @@ export const MAX_TOWER_LEVEL = 4;
 //   weakTo    tower element that deals 1.5x: fire | ice | poison | storm | arcane
 //   summons   boss calls { count } of { type } when its hp drops to { at }
 //   enrage    boss speeds up (and hardens) below 30% hp
+// Abilities:
+//   flying    cannot be blocked by melee heroes; cannon, mortar and flame
+//             (targets: 'ground') cannot reach it
+//   dodge     chance to evade a physical hit
+//   heal      mends every other enemy within { radius } by { hps } per second
+//   charge    speed multiplier once below half health
+//   split     on death spawns { count } of { type }
+//   explode   on death burns the hero within { radius } for { damage }
+//   blink     every { cooldown }s leaps { distance } along the road
 // `look` drives the sprite composer in render.js:
 //   body: 'round' | 'long' | 'big' | 'wisp'
 //   features: any of ears, club, tooth, wolf, helmet, pads, tusks, shell,
@@ -229,6 +241,12 @@ export const ENEMY_TYPES = {
     armor: 0.3, magicResist: 0, color: '#3e7d3e',
     look: { body: 'round', features: ['helmet', 'pads', 'tusks'] },
   },
+  gobShaman: {
+    id: 'gobShaman', name: 'Goblin Shaman', hp: 55, speed: 55, bounty: 14, radius: 9,
+    armor: 0, magicResist: 0.3, color: '#7fb34a',
+    heal: { radius: 60, hps: 3 },
+    look: { body: 'round', features: ['ears', 'staff', 'mask'] },
+  },
   orcWarlord: {
     id: 'orcWarlord', name: 'Orc Warlord', hp: 650, speed: 32, bounty: 150, radius: 19, lives: 5,
     armor: 0.35, magicResist: 0.1, color: '#2f6b2f', boss: true,
@@ -248,12 +266,14 @@ export const ENEMY_TYPES = {
     armor: 0, magicResist: 0.7, color: '#8fd3ff',
     look: { body: 'wisp', features: ['glow', 'wings'] },
     shield: 15, element: 'ice', immune: ['slow'], weakTo: 'fire',
+    flying: true,
   },
   yeti: {
     id: 'yeti', name: 'Yeti', hp: 200, speed: 42, bounty: 28, radius: 13, lives: 2,
     armor: 0.25, magicResist: 0, color: '#d8dde3',
     look: { body: 'round', features: ['horns', 'tooth'] },
     element: 'ice', immune: ['slow'], weakTo: 'fire',
+    charge: 1.6,
   },
   frostTroll: {
     id: 'frostTroll', name: 'Frost Troll', hp: 380, speed: 34, bounty: 52, radius: 14, lives: 2,
@@ -279,18 +299,26 @@ export const ENEMY_TYPES = {
     id: 'bandit', name: 'Bandit', hp: 70, speed: 70, bounty: 12, radius: 10,
     armor: 0.1, magicResist: 0.2, color: '#c99a5a',
     look: { body: 'round', features: ['hat', 'scarf'] },
+    dodge: 0.2,
   },
   duneWasp: {
     id: 'duneWasp', name: 'Dune Wasp', hp: 45, speed: 130, bounty: 13, radius: 7,
     armor: 0, magicResist: 0.4, color: '#e8c33a',
     look: { body: 'wisp', features: ['wings', 'stinger'] },
     shield: 15,
+    flying: true,
   },
   sandGolem: {
     id: 'sandGolem', name: 'Sand Golem', hp: 400, speed: 30, bounty: 64, radius: 15, lives: 2,
     armor: 0.6, magicResist: 0, color: '#d9b36c',
     look: { body: 'round', features: ['shell', 'spikes'] },
     regen: 4, weakTo: 'storm',
+    split: { type: 'sandling', count: 2 },
+  },
+  sandling: {
+    id: 'sandling', name: 'Sandling', hp: 60, speed: 60, bounty: 6, radius: 8,
+    armor: 0.4, magicResist: 0, color: '#d9b36c',
+    look: { body: 'round', features: ['shell'] },
   },
   sandWyrm: {
     id: 'sandWyrm', name: 'Sand Wyrm', hp: 2200, speed: 34, bounty: 450, radius: 22, lives: 5,
@@ -312,12 +340,14 @@ export const ENEMY_TYPES = {
     armor: 0, magicResist: 0.9, color: '#a8ffc8',
     look: { body: 'wisp', features: ['glow', 'flame'] },
     shield: 15, element: 'storm', weakTo: 'poison',
+    flying: true, blink: { distance: 55, cooldown: 4 },
   },
   swampWitch: {
     id: 'swampWitch', name: 'Swamp Witch', hp: 130, speed: 55, bounty: 34, radius: 10,
     armor: 0.1, magicResist: 0.7, color: '#7a5c9e',
     look: { body: 'round', features: ['hat', 'glow'] },
     shield: 30, element: 'poison', immune: ['poison'], weakTo: 'fire',
+    heal: { radius: 60, hps: 2.5 },
   },
   bogTroll: {
     id: 'bogTroll', name: 'Bog Troll', hp: 540, speed: 32, bounty: 78, radius: 15, lives: 2,
@@ -339,18 +369,21 @@ export const ENEMY_TYPES = {
     armor: 0, magicResist: 0.6, color: '#e8552f',
     look: { body: 'round', features: ['horns', 'flame', 'tooth'] },
     element: 'fire', immune: ['burn'], weakTo: 'ice',
+    explode: { damage: 25, radius: 40 },
   },
   lavaHound: {
     id: 'lavaHound', name: 'Lava Hound', hp: 150, speed: 75, bounty: 30, radius: 10,
     armor: 0.35, magicResist: 0.3, color: '#8a2f1f',
     look: { body: 'long', features: ['wolf', 'flame'] },
     element: 'fire', immune: ['burn'], weakTo: 'ice',
+    charge: 1.5,
   },
   ashWraith: {
     id: 'ashWraith', name: 'Ash Wraith', hp: 150, speed: 75, bounty: 40, radius: 9,
     armor: 0, magicResist: 0.85, color: '#6c6c7a',
     look: { body: 'wisp', features: ['glow', 'hat'] },
     shield: 45, element: 'storm', weakTo: 'poison',
+    flying: true,
   },
   obsidianGolem: {
     id: 'obsidianGolem', name: 'Obsidian Golem', hp: 720, speed: 28, bounty: 115, radius: 16, lives: 2,

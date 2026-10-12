@@ -7,6 +7,7 @@ import { Game, PHASE, describeTraits } from './game.js';
 import { Effects } from './effects.js';
 import { render } from './render.js';
 import { SoundSystem } from './audio.js';
+import { STORY, storyText } from './story.js';
 
 const PROGRESS_KEY = 'towerrush-progress';
 const HERO_KEY = 'towerrush-hero';
@@ -243,7 +244,51 @@ function loadLevel(index) {
   levelSelect.hidden = true;
   updateHud();
   updateHeroPanel();
+  const chapter = STORY.levels[LEVELS[levelIndex].id];
+  const briefing = () => { if (chapter) showStory({ title: chapter.title, lines: chapter.lines }, 'To battle'); };
+  let seenPrologue = false;
+  try { seenPrologue = localStorage.getItem(SEEN_PROLOGUE_KEY) === '1'; } catch { /* fine */ }
+  if (levelIndex === 0 && !seenPrologue) {
+    try { localStorage.setItem(SEEN_PROLOGUE_KEY, '1'); } catch { /* fine */ }
+    showStory(STORY.prologue, 'Continue', briefing);
+  } else {
+    briefing();
+  }
 }
+
+// --- Story cards ---------------------------------------------------------
+const storyEl = document.getElementById('story');
+const storyTitleEl = document.getElementById('story-title');
+const storyLinesEl = document.getElementById('story-lines');
+const storyNextBtn = document.getElementById('story-next');
+let storyDone = null;
+const SEEN_PROLOGUE_KEY = 'towerrush-prologue';
+
+function heroName() {
+  return HERO_TYPES[heroChoice] ? HERO_TYPES[heroChoice].name : 'your hero';
+}
+
+// Show one card; `onDone` runs when the player continues.
+function showStory(card, buttonText, onDone) {
+  storyTitleEl.textContent = storyText(card.title, heroName());
+  storyLinesEl.replaceChildren();
+  for (const line of card.lines) {
+    const p = document.createElement('p');
+    const who = document.createElement('strong');
+    who.textContent = `${storyText(line.speaker, heroName())}:`;
+    p.append(who, storyText(line.text, heroName()));
+    storyLinesEl.appendChild(p);
+  }
+  storyNextBtn.textContent = buttonText;
+  storyDone = onDone;
+  storyEl.hidden = false;
+}
+storyNextBtn.addEventListener('click', () => {
+  storyEl.hidden = true;
+  const done = storyDone;
+  storyDone = null;
+  if (done) done();
+});
 
 const heroList = document.getElementById('hero-list');
 function renderHeroPicker() {
@@ -376,6 +421,12 @@ function frame(now) {
   for (let step = 0; step < speed; step++) {
     game.update(dt);
     const events = game.drainEvents();
+    for (const e of events) {
+      if (e.type === 'boss-spawned') {
+        const chapter = STORY.levels[LEVELS[levelIndex].id];
+        if (chapter && chapter.taunt) e.taunt = chapter.taunt;
+      }
+    }
     effects.process(events);
     sound.process(events);
     effects.ambient(game, dt);
@@ -384,6 +435,17 @@ function frame(now) {
   sound.update(game, dt);
   if (game.phase !== phaseBefore || game.gold !== goldBefore || game.lives !== livesBefore) {
     updateHud();
+  }
+  if (game.phase === PHASE.WON && phaseBefore !== PHASE.WON) {
+    // Let the fireworks play, then tell the next part of the story.
+    const chapter = STORY.levels[LEVELS[levelIndex].id];
+    const last = levelIndex + 1 >= LEVELS.length;
+    setTimeout(() => {
+      if (game.phase !== PHASE.WON) return;
+      const after = last ? () => showStory(STORY.epilogue, 'The end... for now') : null;
+      if (chapter && chapter.victory) showStory({ title: chapter.title, lines: chapter.victory }, last ? 'Continue' : 'Onward', after);
+      else if (after) after();
+    }, 2600);
   }
   if (ui.marker) {
     ui.marker.life -= dt;

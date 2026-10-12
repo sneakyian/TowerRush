@@ -37,10 +37,10 @@ export const LEVELS = [
       { entries: [{ type: 'goblin', count: 8, interval: 1.0 }] },
       { entries: [{ type: 'goblin', count: 10, interval: 0.9 }, { type: 'wolf', count: 5, interval: 0.7 }] },
       { entries: [{ type: 'wolf', count: 10, interval: 0.6 }, { type: 'goblin', count: 8, interval: 0.8 }] },
-      { entries: [{ type: 'orc', count: 5, interval: 1.8 }, { type: 'goblin', count: 12, interval: 0.7 }] },
+      { entries: [{ type: 'orc', count: 5, interval: 1.8 }, { type: 'goblin', count: 12, interval: 0.7 }, { type: 'gobShaman', count: 2, interval: 4 }] },
       { entries: [{ type: 'orc', count: 8, interval: 1.4 }, { type: 'wolf', count: 14, interval: 0.5 }] },
-      { entries: [{ type: 'goblin', count: 14, interval: 0.6 }, { type: 'orc', count: 6, interval: 1.4 }, { type: 'wolf', count: 10, interval: 0.5 }] },
-      { entries: [{ type: 'goblin', count: 10, interval: 0.7 }, { type: 'orcWarlord', count: 1, interval: 3 }, { type: 'orc', count: 8, interval: 1.2 }] },
+      { entries: [{ type: 'goblin', count: 14, interval: 0.6 }, { type: 'orc', count: 6, interval: 1.4 }, { type: 'wolf', count: 10, interval: 0.5 }, { type: 'gobShaman', count: 3, interval: 3 }] },
+      { entries: [{ type: 'goblin', count: 10, interval: 0.7 }, { type: 'orcWarlord', count: 1, interval: 3 }, { type: 'orc', count: 8, interval: 1.2 }, { type: 'gobShaman', count: 3, interval: 3.5 }] },
     ],
   },
 

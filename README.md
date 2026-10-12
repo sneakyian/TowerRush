@@ -3,6 +3,15 @@
 A Kingdom Rush-inspired tower defense game. Plain HTML5 canvas and vanilla
 JavaScript — no dependencies, no build step.
 
+## The story
+
+The fire under Ember Caldera has woken, and something is calling the wild
+tribes down on the kingdom of Aldermere. As Warden of the marches you hold
+five roads in turn, with a hero of your choosing beside you, until the
+trail leads to the dragon Vexarion himself. Each chapter opens with a
+briefing, each boss has words for you, and the tale closes after the
+caldera.
+
 ## How to play
 
 **Easiest:** double-click `play.html` — a self-contained build that runs
@@ -54,7 +63,10 @@ gate to return after a short wait if they die.
 | **Mordrek**         | Skeleton paladin; blocks two enemies, heals as he hits        | **Consecration**: scorches and stuns, mends his bones |
 
 Melee heroes hold the enemies that reach them (bosses shove straight
-through); enemies fight back, so pull a hurt hero out of the line.
+through, and fliers sail over); enemies fight back, so pull a hurt hero
+out of the line. Wherever you post a hero it stands guard: anything that
+comes near the post gets chased down and fought, and the hero walks back
+to its post once the road is clear.
 
 ### Towers
 
@@ -92,6 +104,18 @@ Enemies carry traits that reward reading the roster and building counters:
 | **Element**    | Fire, ice, poison or storm; immune to its own status (fire ignores burn, ice ignores chill, poison ignores poison) | Hit the opposing element |
 | **Weak to X**  | Towers of element X deal 1.75× and ignore armor and wards                    | Frost vs fire, flame vs ice, venom vs storm, tesla vs golems |
 
+Enemies also have abilities of their own:
+
+| Ability        | Who                                   | What it does                                                        |
+| -------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| **Flying**     | Ice sprites, dune wasps, wisps, ash wraiths | Sail over melee heroes; cannon, mortar and flame cannot reach them |
+| **Healer**     | Goblin shamans, swamp witches          | Mend every ally around them each second. Kill them first            |
+| **Evasive**    | Bandits                                | Dodge a share of physical hits. Magic always lands                  |
+| **Charges**    | Yetis, lava hounds                     | Break into a run below half health                                  |
+| **Splits**     | Sand golems                            | Burst into two sandlings when killed                                |
+| **Explodes**   | Fire imps                              | Burn a hero standing close when they die                            |
+| **Blinks**     | Will-o-wisps                           | Leap along the road every few seconds                               |
+
 Tower elements: Frost Spire is **ice**, Flamethrower is **fire**, Venom
 Spitter is **poison**, Tesla Coil is **storm**, Mage Tower and Laser Lance
 are **arcane**.
@@ -123,6 +147,7 @@ index.html       Page, HUD, level select, and styles
 play.html        Generated single-file build (npm run build)
 src/config.js    Tower tiers and the full enemy roster (stats + sprite look)
 src/levels.js    The five levels: paths, spots, water, themes, waves
+src/story.js     Campaign prologue, chapter briefings, boss taunts, epilogue
 src/path.js      Polyline path addressed by distance
 src/game.js      Core simulation incl. heroes (no DOM — runs in Node for tests)
 src/effects.js   Particles, floating text, banners (no DOM)
