@@ -61,6 +61,7 @@ export function render(ctx, game, effects, ui, time) {
     ctx.globalAlpha = 1;
   }
   drawTexts(ctx, effects);
+  drawWavePreview(ctx, game, time);
   drawBossBar(ctx, game);
   drawBanner(ctx, effects, level);
 }
@@ -4541,6 +4542,13 @@ function drawEnemies(ctx, game, time) {
     const pos = game.path.positionAt(enemy.dist);
     const ahead = game.path.positionAt(enemy.dist + 2);
     const facing = ahead.x >= pos.x ? 1 : -1;
+    drawEnemySprite(ctx, game, enemy, pos, facing, time);
+  }
+}
+
+// One enemy, composed from its type's look, at `pos`. Also used by the
+// wave preview with a stand-in enemy object.
+function drawEnemySprite(ctx, game, enemy, pos, facing, time) {
     const type = game.enemyTypes[enemy.typeId];
     const look = type.look || { body: 'round', features: [] };
     const has = (f) => look.features.includes(f);
@@ -4652,6 +4660,20 @@ function drawEnemies(ctx, game, time) {
       ctx.globalAlpha = 1;
     }
 
+    // Flying marker: a pair of wing strokes above the head.
+    if (enemy.flying && !enemy.preview) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 1.4;
+      ctx.lineCap = 'round';
+      const wy = y - r - 14 + Math.sin(time * 8 + enemy.id) * 1;
+      ctx.beginPath();
+      ctx.moveTo(x - 7, wy + 2);
+      ctx.quadraticCurveTo(x - 3.5, wy - 3, x - 0.5, wy + 1);
+      ctx.moveTo(x + 7, wy + 2);
+      ctx.quadraticCurveTo(x + 3.5, wy - 3, x + 0.5, wy + 1);
+      ctx.stroke();
+    }
+
     // Health bar (only once hurt). Bosses use the top bar instead.
     if (enemy.hp < enemy.maxHp && !enemy.boss) {
       const w = 22;
@@ -4662,7 +4684,6 @@ function drawEnemies(ctx, game, time) {
       ctx.fillRect(x - w / 2, y - r - 9, w * frac, 3);
     }
     ctx.restore();
-  }
 }
 
 function hexToRgba(hex, alpha) {
@@ -5751,6 +5772,77 @@ function drawEnemyAbilities(ctx, enemy, type, x, y, pos, r, facing, time) {
     glowDisc(ctx, x, y + r * 0.3, r * 0.9, `rgba(255,120,40,${0.25 + Math.sin(time * 14 + enemy.id) * 0.15})`);
     ctx.globalCompositeOperation = 'source-over';
   }
+}
+
+// Kingdom Rush-style incoming-wave card by the enemies' cave: who is coming,
+// how many, and what to watch out for.
+function drawWavePreview(ctx, game, time) {
+  if (game.phase !== 'build') return;
+  const next = game.nextWave();
+  if (!next) return;
+  const { level } = game;
+  const p0 = game.path.positionAt(Math.min(24, game.path.totalLength));
+  const rows = Math.ceil(next.entries.length / 4);
+  const warnings = next.warnings.slice(0, 3);
+  ctx.font = '11px sans-serif';
+  const widest = warnings.reduce((m, t) => Math.max(m, ctx.measureText(t).width), 0);
+  const w = Math.max(232, Math.min(level.width - 20, 36 + widest), 20 + Math.min(next.entries.length, 4) * 54);
+  const h = 34 + rows * 44 + warnings.length * 15 + 6;
+  const x = Math.min(Math.max(p0.x + 30, 10), level.width - w - 10);
+  const y = Math.min(Math.max(p0.y - h / 2 + 20, 10), level.height - h - 10);
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.fillStyle = 'rgba(14,12,18,0.82)';
+  ctx.strokeStyle = next.final ? 'rgba(255,120,60,0.9)' : 'rgba(255,217,138,0.6)';
+  ctx.lineWidth = 1.5;
+  roundRect(ctx, x, y, w, h, 8);
+  // Pointer toward the cave.
+  ctx.fillStyle = 'rgba(14,12,18,0.82)';
+  ctx.beginPath();
+  ctx.moveTo(x, y + 20);
+  ctx.lineTo(x - 8, y + 26);
+  ctx.lineTo(x, y + 32);
+  ctx.closePath();
+  ctx.fill();
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = next.final ? '#ff9f45' : '#ffd98a';
+  ctx.fillText(next.final ? `Final wave ${next.index + 1}: the boss comes` : `Next wave ${next.index + 1} of ${game.waveCount}`, x + 10, y + 17);
+  // Enemy sprites with counts.
+  next.entries.forEach((entry, i) => {
+    const type = game.enemyTypes[entry.typeId];
+    const col = i % 4;
+    const row = Math.floor(i / 4);
+    const cx = x + 32 + col * 54;
+    const cy = y + 50 + row * 44;
+    const r = Math.min(type.radius, 11);
+    const stand = { id: 1000 + i, typeId: entry.typeId, radius: r, dist: 0, hp: type.hp, maxHp: type.hp, age: 1, flying: !!type.flying, element: type.element || null, regen: 0, shield: type.shield ? { hp: type.shield, max: type.shield, sinceHit: 0 } : null, immune: [], flash: 0, stun: 0, dodge: 0, preview: true };
+    drawEnemySprite(ctx, game, stand, { x: cx, y: cy }, 1, time);
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeText(`×${entry.count}`, cx, cy + 20);
+    ctx.fillText(`×${entry.count}`, cx, cy + 20);
+    if (type.flying) {
+      ctx.font = '9px sans-serif';
+      ctx.fillStyle = '#9fd8ff';
+      ctx.strokeText('flying', cx, cy - r - 10);
+      ctx.fillText('flying', cx, cy - r - 10);
+    }
+  });
+  // Warnings.
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  warnings.forEach((warning, i) => {
+    const wy = y + 34 + rows * 44 + i * 15 + 6;
+    ctx.fillStyle = '#ffb347';
+    ctx.fillText('⚠', x + 10, wy);
+    ctx.fillStyle = '#f3e7c9';
+    ctx.fillText(warning, x + 24, wy);
+  });
+  ctx.restore();
 }
 
 function drawBossBar(ctx, game) {

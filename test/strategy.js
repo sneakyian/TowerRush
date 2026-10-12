@@ -91,7 +91,29 @@ function spend(game, order, rotation, state) {
 }
 
 // Play a level to completion. Returns a summary.
-export function playLevel(level, { strategy = 'mixed', step = 1 / 30, maxSeconds = 1200 } = {}) {
+// Dodges and a few effects roll dice; a seeded generator keeps every run
+// of the harness identical.
+function seededRandom(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let x = Math.imul(t ^ (t >>> 15), 1 | t);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function playLevel(level, { strategy = 'mixed', step = 1 / 30, maxSeconds = 1200, seed = 7 } = {}) {
+  const realRandom = Math.random;
+  Math.random = seededRandom(seed);
+  try {
+    return playLevelInner(level, { strategy, step, maxSeconds });
+  } finally {
+    Math.random = realRandom;
+  }
+}
+
+function playLevelInner(level, { strategy, step, maxSeconds }) {
   const game = new Game(level);
   const order = spotsByPathDistance(level);
   const chosen = STRATEGIES[strategy];

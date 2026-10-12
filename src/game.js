@@ -56,6 +56,31 @@ export function describeTraits(type) {
   return out;
 }
 
+// Short warnings for a set of enemy types, most important first.
+export function waveWarnings(types) {
+  const out = [];
+  const add = (f, label, advice) => {
+    const who = types.filter(f).map((t) => t.name);
+    if (who.length) out.push(`${label} (${who.join(', ')}): ${advice}`);
+  };
+  add((t) => t.boss, 'Boss', 'summons help at half health');
+  add((t) => t.flying, 'Flying', 'cannon, mortar and flame cannot reach them');
+  add((t) => t.shield, 'Shielded', 'magic breaks shields; burn and poison bounce off');
+  add((t) => t.heal, 'Healers', 'they mend the others, kill them first');
+  add((t) => t.regen, 'Regenerates', 'burn or poison stops it');
+  add((t) => (t.immune || []).includes('burn'), 'Fireproof', 'burn does nothing, use frost');
+  add((t) => (t.immune || []).includes('slow'), 'Frostproof', 'chill does nothing, use fire');
+  add((t) => (t.immune || []).includes('poison'), 'Poison-proof', 'venom does nothing to them');
+  add((t) => t.armor >= 0.4, 'Heavy armour', 'magic or sniper rounds');
+  add((t) => t.magicResist >= 0.6, 'Spell-warded', 'arrows, cannon and sniper');
+  add((t) => t.dodge, 'Evasive', 'dodges arrows, magic always lands');
+  add((t) => t.split, 'Splits', 'into smaller enemies when killed');
+  add((t) => t.explode, 'Explodes', 'keep your hero clear');
+  add((t) => t.blink, 'Blinks', 'leaps forward along the road');
+  add((t) => t.charge, 'Charges', 'runs when wounded');
+  return out;
+}
+
 export class Game {
   constructor(level, { towerTypes = TOWER_TYPES, enemyTypes = ENEMY_TYPES, heroTypes = HERO_TYPES } = {}) {
     this.level = level;
@@ -82,6 +107,19 @@ export class Game {
 
   get waveCount() {
     return this.level.waves.length;
+  }
+
+  // What the next wave brings, aggregated by type, with the warnings a
+  // player needs before building: fliers, shields, healers and the like.
+  nextWave() {
+    const index = this.waveIndex + 1;
+    if (index >= this.waveCount) return null;
+    const counts = new Map();
+    for (const entry of this.level.waves[index].entries) {
+      counts.set(entry.type, (counts.get(entry.type) || 0) + entry.count);
+    }
+    const entries = [...counts].map(([typeId, count]) => ({ typeId, count, name: this.enemyTypes[typeId].name }));
+    return { index, final: index === this.waveCount - 1, entries, warnings: waveWarnings(entries.map((e) => this.enemyTypes[e.typeId])) };
   }
 
   // The live boss enemy, if one is on the field.

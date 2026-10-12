@@ -221,3 +221,19 @@ test('a freshly built War Beacon reaches at least one other build spot almost ev
     assert.ok(covered >= spots.length - 2, `${level.name}: only ${covered}/${spots.length} spots have a neighbour within ${range}`);
   }
 });
+
+test('the next-wave preview aggregates enemies and warns about fliers, shields and healers', () => {
+  const game = new Game(LEVELS[3]); // Murkwater
+  game.waveIndex = 1; // wave 3 next: wisps and witches
+  const next = game.nextWave();
+  assert.equal(next.index, 2);
+  assert.ok(next.entries.some((e) => e.typeId === 'willOWisp' && e.count === 12));
+  assert.ok(next.warnings.some((w) => w.startsWith('Flying')));
+  assert.ok(next.warnings.some((w) => w.startsWith('Shielded')));
+  assert.ok(next.warnings.some((w) => w.startsWith('Healers')));
+  game.waveIndex = game.waveCount - 1;
+  assert.equal(game.nextWave(), null, 'nothing after the last wave');
+  const first = new Game(LEVELS[0]).nextWave();
+  assert.equal(first.entries.length, 1);
+  assert.equal(first.entries[0].count, 8);
+});

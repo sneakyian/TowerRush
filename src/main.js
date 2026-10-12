@@ -93,6 +93,23 @@ const goldEl = document.getElementById('gold');
 const livesEl = document.getElementById('lives');
 const waveEl = document.getElementById('wave');
 const statusEl = document.getElementById('status');
+const wavePreviewEl = document.getElementById('wave-preview');
+
+function updateWavePreview() {
+  const next = game.phase === PHASE.BUILD ? game.nextWave() : null;
+  wavePreviewEl.replaceChildren();
+  if (!next) return;
+  const who = next.entries.map((e) => `${e.count}× ${e.name}`).join(', ');
+  const head = document.createElement('strong');
+  head.textContent = `${next.final ? 'Final wave' : `Wave ${next.index + 1}`}: `;
+  wavePreviewEl.append(head, who);
+  for (const warning of next.warnings) {
+    const span = document.createElement('span');
+    span.className = 'warn';
+    span.textContent = ` · ⚠ ${warning}`;
+    wavePreviewEl.appendChild(span);
+  }
+}
 const towerInfoEl = document.getElementById('tower-info');
 const startWaveBtn = document.getElementById('start-wave');
 const speedBtn = document.getElementById('speed');
@@ -335,6 +352,7 @@ function describeStats(type, stats) {
   if (stats.splashRadius) parts.push(`${stats.splashRadius} splash`);
   if (stats.armorPierce) parts.push(`pierces ${Math.round(stats.armorPierce * 100)}% armor`);
   if (type.targeting === 'toughest') parts.push('targets the toughest');
+  if (type.targets === 'ground') parts.push('ground targets only');
   if (stats.slow) parts.push(`slows ${Math.round((1 - stats.slow.factor) * 100)}% for ${stats.slow.duration}s`);
   if (stats.burn) parts.push(`burns ${stats.burn.dps}/s for ${stats.burn.duration}s`);
   if (stats.poison) parts.push(`poison ${stats.poison.dpsPerStack}/s per stack, up to ${stats.poison.maxStacks}`);
@@ -350,6 +368,7 @@ function flashStatus(text) {
 }
 
 function updateHud() {
+  updateWavePreview();
   levelNameEl.textContent = `${levelIndex + 1}. ${game.level.name}`;
   goldEl.textContent = game.gold;
   livesEl.textContent = game.lives;
