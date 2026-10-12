@@ -24,6 +24,10 @@ export const MUSIC_THEMES = {
   sunscorch: { root: 57, scale: 'phrygianDom', chords: [0, 1, 0, 4], tempo: [90, 118, 138], pad: 'sawtooth', lead: 'square', bass: 'sawtooth', bright: 0.35 },
   murkwater: { root: 55, scale: 'dorian', chords: [0, 3, 0, 6], tempo: [80, 110, 130], pad: 'triangle', lead: 'triangle', bass: 'sine', bright: 0.3 },
   caldera: { root: 52, scale: 'harmonicMinor', chords: [0, 5, 3, 4], tempo: [92, 124, 148], pad: 'sawtooth', lead: 'sawtooth', bass: 'sawtooth', bright: 0.25 },
+  // Part II: synthwave in the dark. Square and saw leads, driving bass.
+  dis: { root: 45, scale: 'phrygianDom', chords: [0, 1, 0, 5], tempo: [96, 128, 150], pad: 'sawtooth', lead: 'square', bass: 'sawtooth', bright: 0.3 },
+  neon: { root: 48, scale: 'dorian', chords: [0, 5, 3, 4], tempo: [104, 132, 156], pad: 'square', lead: 'sawtooth', bass: 'square', bright: 0.45 },
+  pit: { root: 43, scale: 'harmonicMinor', chords: [0, 5, 6, 4], tempo: [92, 126, 160], pad: 'sawtooth', lead: 'sawtooth', bass: 'sawtooth', bright: 0.2 },
   boss: { root: 50, scale: 'minorPent', chords: [0, 2, 3, 4], tempo: [100, 130, 150], pad: 'sawtooth', lead: 'square', bass: 'sawtooth', bright: 0.4 },
 };
 
@@ -32,7 +36,7 @@ export const MUSIC_THEMES = {
 const RATE_LIMITS = {
   archerShot: 0.05, mageShot: 0.08, cannonShot: 0.12, mortarShot: 0.25, sniperShot: 0.15, frostShot: 0.08,
   venomShot: 0.1, hit: 0.04, explosion: 0.08, zap: 0.1, death: 0.05, coin: 0.1, click: 0.03, frostHit: 0.08,
-  venomHit: 0.08, dodge: 0.1, charge: 0.2, blink: 0.1, split: 0.2, heroSwing: 0.1, heroBreath: 0.15, heroBolt: 0.12, shieldBreak: 0.1, shatter: 0.15,
+  venomHit: 0.08, missileShot: 0.08, curse: 0.3, brood: 0.3, dodge: 0.1, charge: 0.2, blink: 0.1, split: 0.2, heroSwing: 0.1, heroBreath: 0.15, heroBolt: 0.12, shieldBreak: 0.1, shatter: 0.15,
 };
 const MAX_VOICES = 28;
 
@@ -182,8 +186,10 @@ export class SoundSystem {
     for (const e of events) {
       switch (e.type) {
         case 'shot': this.cue(SHOT_CUES[e.towerType] || 'archerShot', { x: e.x, level: e.level }); break;
+        case 'tower-cursed': this.cue('curse', { x: e.x }); break;
+        case 'spawned-brood': this.cue('brood', { x: e.x }); break;
         case 'hit':
-          if (e.towerType === 'cannon' || e.towerType === 'mortar') this.cue('explosion', { x: e.x, big: e.towerType === 'mortar' });
+          if (e.towerType === 'cannon' || e.towerType === 'mortar' || e.towerType === 'missile') this.cue('explosion', { x: e.x, big: e.towerType === 'mortar' });
           else if (e.towerType === 'frost') this.cue('frostHit', { x: e.x });
           else if (e.towerType === 'venom') this.cue('venomHit', { x: e.x });
           else if (e.towerType !== 'flame') this.cue('hit', { x: e.x });
@@ -411,7 +417,7 @@ export class SoundSystem {
 
 const SHOT_CUES = {
   archer: 'archerShot', mage: 'mageShot', cannon: 'cannonShot', mortar: 'mortarShot', sniper: 'sniperShot',
-  frost: 'frostShot', tesla: null, flame: null, venom: 'venomShot', laser: null, beacon: null,
+  frost: 'frostShot', tesla: null, flame: null, venom: 'venomShot', laser: null, beacon: null, missile: 'missileShot', gravity: null,
 };
 
 // A touch of pitch variation keeps repeated sounds from feeling mechanical.
@@ -495,6 +501,18 @@ const CUES = {
   },
   dodge: (s, t, o) => {
     s.noise({ t0: t, dur: 0.08, gain: 0.07, filter: 'bandpass', freq: 3000, freqEnd: 5000, q: 1, x: o.x });
+  },
+  missileShot: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.4, gain: 0.16, filter: 'bandpass', freq: 400, freqEnd: 2200, q: 0.7, x: o.x });
+    s.tone({ type: 'sawtooth', freq: 180, freqEnd: 520, t0: t, dur: 0.3, gain: 0.06, x: o.x });
+  },
+  curse: (s, t, o) => {
+    [660, 622, 587, 466].forEach((f, i) => s.tone({ type: 'square', freq: f, t0: t + i * 0.09, dur: 0.18, gain: 0.05, release: 0.1, x: o.x }));
+    s.noise({ t0: t, dur: 0.4, gain: 0.06, filter: 'bandpass', freq: 900, freqEnd: 300, q: 1.2, x: o.x });
+  },
+  brood: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.3, gain: 0.12, filter: 'lowpass', freq: 900, freqEnd: 200, x: o.x });
+    s.tone({ type: 'triangle', freq: 160, freqEnd: 70, t0: t, dur: 0.3, gain: 0.08, x: o.x });
   },
   // Enemies and the castle.
   death: (s, t, o) => {

@@ -41,6 +41,10 @@ export const STRATEGIES = {
     sunscorch: ['tesla', 'archer', 'mage', 'tesla', 'frost', 'archer'],
     murkwater: ['archer', 'flame', 'mage', 'venom', 'tesla', 'flame'],
     caldera: ['archer', 'frost', 'tesla', 'archer', 'venom', 'archer', 'frost', 'laser'],
+    // Part II: gravity wells unlock at the gate, missiles after it.
+    dis: ['frost', 'archer', 'gravity', 'tesla', 'mage', 'frost', 'sniper', 'laser', 'archer', 'venom'],
+    neon: ['venom', 'tesla', 'missile', 'gravity', 'venom', 'mage', 'tesla', 'archer', 'laser', 'missile'],
+    pit: ['frost', 'missile', 'frost', 'gravity', 'mage', 'archer', 'tesla', 'missile', 'laser', 'frost', 'sniper'],
   })[level.id] || ['archer', 'flame', 'frost', 'tesla', 'venom', 'mage'],
   archersOnly: ['archer'],
   magesOnly: ['mage'],

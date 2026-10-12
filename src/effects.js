@@ -68,6 +68,8 @@ export class Effects {
         case 'boss-enraged': this.spawnEnrage(event); break;
         case 'shatter': this.spawnShatter(event); break;
         case 'dodge': this.addText(event.x, event.y - 14, 'Miss', '#ffffff', 0.8); break;
+        case 'tower-cursed': this.spawnCurse(event); break;
+        case 'spawned-brood': this.spawnBrood(event); break;
         case 'charge': this.spawnCharge(event); break;
         case 'blink': this.spawnBlink(event); break;
         case 'split': this.spawnSplit(event); break;
@@ -214,6 +216,16 @@ export class Effects {
       if (tower.typeId === 'venom' && Math.random() < dt * 3) {
         this.addParticle({ x: spot.x + rand(-8, 8), y: spot.y - 6, vx: rand(-3, 3), vy: rand(-22, -12), life: rand(0.8, 1.4), size: rand(1.2, 2.2), color: 'rgba(198,255,107,0.8)', shape: 'bubble', wobble: 10 });
       }
+      if (tower.typeId === 'gravity' && Math.random() < dt * 14) {
+        // Motes spiralling into the well.
+        const stats = game.towerStats(tower);
+        const a = rand(0, Math.PI * 2);
+        const d = stats.range * rand(0.5, 1);
+        this.addParticle({ x: spot.x + Math.cos(a) * d, y: spot.y + Math.sin(a) * d * 0.6, vx: -Math.cos(a) * d * 1.2, vy: -Math.sin(a) * d * 0.7 - 10, life: 0.8, size: rand(1, 2), color: pick(['#7a5cff', '#c9bfff', '#3af2ff']), shape: 'star', spin: 6, drag: 0.5 });
+      }
+      if (tower.typeId === 'missile' && tower.cooldown > 1 && Math.random() < dt * 4) {
+        this.addParticle({ x: spot.x + rand(-6, 6), y: spot.y - 18, vx: rand(-3, 3), vy: rand(-12, -6), life: 0.9, size: rand(2, 3), color: 'rgba(180,180,190,0.4)', shape: 'smoke', grow: 1.5 });
+      }
       if (tower.typeId === 'tesla' && Math.random() < dt * 6) {
         const a = rand(0, Math.PI * 2);
         const sy = spot.y - 35 - tower.level * 5;
@@ -243,6 +255,9 @@ export class Effects {
         this.addParticle({ x: proj.x, y: proj.y - 10, vx: rand(-6, 6), vy: rand(-14, -4), life: rand(0.25, 0.5), size: rand(1.5, 3), color: '#8d949b', shape: 'smoke' });
       } else if (t === 'mortar' && Math.random() < dt * 60) {
         this.addParticle({ x: proj.x, y: proj.y - 14, vx: rand(-10, 10), vy: rand(-10, 10), life: rand(0.2, 0.4), size: rand(1.5, 3), color: pick(['#ffb347', '#ff6b35', '#9aa0a6']), shape: Math.random() < 0.6 ? 'ember' : 'smoke' });
+      } else if (t === 'missile' && Math.random() < dt * 70) {
+        this.addParticle({ x: proj.x - proj.dirX * 6, y: proj.y - proj.dirY * 6, vx: -proj.dirX * 20 + rand(-8, 8), vy: -proj.dirY * 20 + rand(-8, 8), life: rand(0.3, 0.6), size: rand(2, 3.5), color: pick(['rgba(200,200,210,0.6)', 'rgba(150,150,160,0.5)']), shape: 'smoke', grow: 1.8 });
+        this.addParticle({ x: proj.x - proj.dirX * 5, y: proj.y - proj.dirY * 5, vx: -proj.dirX * 40, vy: -proj.dirY * 40, life: 0.12, size: 3, color: '#ffb347', shape: 'fire', drag: 3 });
       } else if (t === 'venom' && Math.random() < dt * 20) {
         this.addParticle({ x: proj.x, y: proj.y, vx: rand(-3, 3), vy: 10, life: 0.4, size: 1.6, color: '#8fd33a', shape: 'drop', gravity: 160 });
       } else if (t === 'archer' && Math.random() < dt * 20) {
@@ -600,6 +615,23 @@ export class Effects {
   }
 
   // --- Enemy abilities -------------------------------------------------------------
+
+  spawnCurse(event) {
+    this.addText(event.x, event.y - 36, 'Hexed!', '#c13fd6', 1.1);
+    this.addParticle({ x: event.fromX, y: event.fromY - 10, x2: event.x, y2: event.y - 16, vx: 0, vy: 0, life: 0.3, size: 3, color: 'rgba(193,63,214,0.9)', shape: 'tracer' });
+    this.addParticle({ x: event.x, y: event.y - 12, vx: 0, vy: 0, life: 0.5, size: 28, color: 'rgba(193,63,214,0.9)', shape: 'ring' });
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y - 12, vx: Math.cos(a) * rand(20, 60), vy: Math.sin(a) * rand(20, 60) - 20, life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#c13fd6', '#ff2d95', '#7a5cff']), shape: 'star', spin: rand(-6, 6), drag: 1.5 });
+    }
+  }
+
+  spawnBrood(event) {
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.4, size: 26, color: 'rgba(122,92,255,0.8)', shape: 'ring' });
+    for (let i = 0; i < 10; i++) {
+      this.addParticle({ x: event.x + rand(-10, 10), y: event.y + rand(-6, 6), vx: rand(-30, 30), vy: rand(-40, -10), life: rand(0.4, 0.7), size: rand(2, 4), color: pick(['#3b1f6b', '#7a5cff', '#ff7a2a']), shape: 'smoke', grow: 1.5 });
+    }
+  }
 
   spawnCharge(event) {
     this.addText(event.x, event.y - 16, 'Charge!', '#ff7a45', 0.9);

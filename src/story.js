@@ -74,15 +74,62 @@ export const STORY = {
       taunt: 'Vexarion: "I burned this kingdom once, when your grandsires were children. I remember the taste."',
       victory: [
         { speaker: '{hero}', text: 'It is done. The dragon is ash and the mountain sleeps.' },
+        { speaker: 'Scout Wren', text: 'Warden... the caldera floor has split open. There are stairs going down. Lit stairs.' },
+      ],
+    },
+    dis: {
+      title: 'Part II, Chapter VI — Gates of Dis',
+      lines: [
+        { speaker: 'King Osric', text: 'Vexarion was never the master. Below the mountain lies the Underworld, and something there armed him. Our scouts found a gate of black iron, and it was open.' },
+        { speaker: 'Scout Wren', text: 'The road down glows, Warden. Rivers of fire, and lights in colours that have no names. The dead walk it, and worse than the dead.' },
+        { speaker: 'Royal Artificer Tamsin', text: 'I have something for you. A well that bends the ground itself. Nothing walks quickly through it. Take it; you will need every step they lose.' },
+        { speaker: '{hero}', text: 'Then we go down. Hold the gate behind me.' },
+      ],
+      taunt: 'Baal: "Turn back, little light. The gate opens only one way."',
+      victory: [
+        { speaker: 'Scout Wren', text: 'The Warden of the Gate is broken. Beyond it the tunnels open into a city, Warden. A city, lit like a festival, and every lamp a soul.' },
+        { speaker: 'Royal Artificer Tamsin', text: 'The gate golems were full of black powder. I can make rockets from it. Give me a day.' },
+      ],
+    },
+    neon: {
+      title: 'Part II, Chapter VII — Neon Sprawl',
+      lines: [
+        { speaker: 'Royal Artificer Tamsin', text: 'Rockets, Warden. They fly true, they fly high, and they burst. Nothing in the sky is safe from them now.' },
+        { speaker: 'Hermit Oda', text: 'The city is ruled by Nyx, the Neon Queen. Her shades slip through arrows like smoke, and her succubi can silence a tower with a word. Kill the singers first.' },
+        { speaker: '{hero}', text: 'Let her sing. I have heard worse in the swamp.' },
+      ],
+      taunt: 'Nyx: "Welcome to my city, Warden. Stay. Everyone stays."',
+      victory: [
+        { speaker: 'Hermit Oda', text: 'The queen is dark and the lamps are going out one by one. There is a stair below the throne, and heat coming up it like a furnace.' },
+        { speaker: 'King Osric', text: 'Then that is where it sits. The thing that woke the dragon, that bought the witches, that opened the gate. Finish it, Warden.' },
+      ],
+    },
+    pit: {
+      title: 'Part II, Chapter VIII — Throne of the Pit',
+      lines: [
+        { speaker: 'King Osric', text: 'Moloch, Lord of the Pit. Every war we have fought was his hand on a different puppet. He sits on a throne of everything he has ever burned.' },
+        { speaker: 'Hermit Oda', text: 'He is warded in fire and he heals like the tide. His angels fell with him and mend him still. His cultists will hex your towers. Frost, Warden. Frost and patience.' },
+        { speaker: '{hero}', text: 'I did not come this far to be patient. But I will bring the frost.' },
+      ],
+      taunt: 'Moloch: "You climbed down into my mouth, Warden. I need only close it."',
+      victory: [
+        { speaker: '{hero}', text: 'Moloch is unmade. The fire is going out below us.' },
       ],
     },
   },
-  epilogue: {
-    title: 'The Marches Hold',
+  interlude: {
+    title: 'Part I complete',
     lines: [
-      { speaker: 'King Osric', text: 'The beacons burn white again from Greenfields to the caldera. The tribes have scattered, the witches have gone back to their pools, and the caravans sing on the desert road.' },
-      { speaker: 'King Osric', text: 'Aldermere stands because you held the road, Warden, and because {hero} never once stepped back from it.' },
-      { speaker: 'Scout Wren', text: 'Though... the scouts say the fire under the mountain was never put out. Only banked. Rest while you can.' },
+      { speaker: 'King Osric', text: 'The dragon is dead and the realm breathes. But the stairs under the caldera go down, and they are lit. The war is not over, Warden. It has only found its true shape.' },
+      { speaker: 'King Osric', text: 'Part II opens on the level screen. New engines of war await you below.' },
+    ],
+  },
+  epilogue: {
+    title: 'The Pit Goes Dark',
+    lines: [
+      { speaker: 'King Osric', text: 'The fire under the world is out. The gate of black iron is sealed with the stone of three mountains, and the beacons burn white from Greenfields to the caldera.' },
+      { speaker: 'King Osric', text: 'Aldermere stands because you held the road, Warden, and because {hero} walked into hell and did not step back.' },
+      { speaker: 'Scout Wren', text: 'Go home. Sleep. If the lamps of Dis ever light again, you will be the first I wake.' },
     ],
   },
 };

@@ -178,6 +178,41 @@ export const TOWER_TYPES = {
       { cost: 540, dps: 110, range: 140, rampTime: 2.2, rampMultiplier: 3.2 },
     ],
   },
+  // --- Part 2 towers, unlocked as the underworld campaign opens ---
+  gravity: {
+    id: 'gravity',
+    name: 'Gravity Well',
+    desc: 'Warps the ground: everything in its field crawls. Does not stack with chill, and never freezes a shatter.',
+    damageType: 'true',
+    attack: 'field',
+    color: '#7a5cff',
+    unlockAfter: 4, // playable once the fifth chapter (index 4) is beaten
+    // slow: speed multiplier inside the field; pulse: true damage per second
+    // to everything in the field (tier 4 only).
+    levels: [
+      { cost: 150, range: 80, slow: 0.6, pulse: 0 },
+      { cost: 240, range: 95, slow: 0.5, pulse: 0 },
+      { cost: 350, range: 110, slow: 0.4, pulse: 0 },
+      { cost: 480, range: 125, slow: 0.3, pulse: 18 },
+    ],
+  },
+  missile: {
+    id: 'missile',
+    name: 'Missile Battery',
+    desc: 'Salvos of homing rockets that reach the sky and burst on impact.',
+    damageType: 'physical',
+    attack: 'projectile',
+    projectileSpeed: 260,
+    color: '#ff3f8e',
+    unlockAfter: 5,
+    // salvo: rockets per volley, fired a tenth of a second apart.
+    levels: [
+      { cost: 200, damage: 40, range: 150, fireInterval: 1.6, splashRadius: 30, salvo: 2, armorPierce: 0.3 },
+      { cost: 320, damage: 65, range: 160, fireInterval: 1.5, splashRadius: 34, salvo: 3, armorPierce: 0.35 },
+      { cost: 460, damage: 100, range: 170, fireInterval: 1.4, splashRadius: 38, salvo: 3, armorPierce: 0.4 },
+      { cost: 640, damage: 150, range: 185, fireInterval: 1.3, splashRadius: 44, salvo: 4, armorPierce: 0.5 },
+    ],
+  },
   beacon: {
     id: 'beacon',
     name: 'War Beacon',
@@ -220,6 +255,8 @@ export const MAX_TOWER_LEVEL = 4;
 //   split     on death spawns { count } of { type }
 //   explode   on death burns the hero within { radius } for { damage }
 //   blink     every { cooldown }s leaps { distance } along the road
+//   curse     every { every }s hexes the nearest tower for { duration }s
+//   spawner   every { every }s births { count } of { type } beside it
 // `look` drives the sprite composer in render.js:
 //   body: 'round' | 'long' | 'big' | 'wisp'
 //   features: any of ears, club, tooth, wolf, helmet, pads, tusks, shell,
@@ -398,6 +435,91 @@ export const ENEMY_TYPES = {
     shield: 900, element: 'fire', immune: ['burn'], weakTo: 'ice', regen: 20, enrage: true,
     summons: { at: 0.5, type: 'fireImp', count: 10 },
   },
+
+  // ===== Part 2: The Underworld =====
+  // --- Level 6: Gates of Dis ---
+  hellhound: {
+    id: 'hellhound', name: 'Hellhound', hp: 260, speed: 95, bounty: 34, radius: 11,
+    armor: 0.3, magicResist: 0.3, color: '#b8321f', element: 'fire', immune: ['burn'], weakTo: 'ice', charge: 1.5,
+    look: { body: 'long', features: ['wolf', 'flame', 'spikes'] },
+  },
+  cinderling: {
+    id: 'cinderling', name: 'Cinderling', hp: 100, speed: 125, bounty: 16, radius: 7,
+    armor: 0, magicResist: 0.5, color: '#ff7a2a', element: 'fire', immune: ['burn'], weakTo: 'ice', explode: { damage: 30, radius: 44 },
+    look: { body: 'round', features: ['flame', 'tooth', 'horns'] },
+  },
+  gateGolem: {
+    id: 'gateGolem', name: 'Gate Golem', hp: 1100, speed: 30, bounty: 140, radius: 17, lives: 2,
+    armor: 0.65, magicResist: 0.2, color: '#2a2f4a', regen: 8, weakTo: 'storm', split: { type: 'cinderling', count: 3 },
+    look: { body: 'round', features: ['shell', 'spikes', 'glow'] },
+  },
+  soulWisp: {
+    id: 'soulWisp', name: 'Soul Wisp', hp: 200, speed: 110, bounty: 30, radius: 8,
+    armor: 0, magicResist: 0.8, color: '#3af2ff', shield: 120, element: 'storm', weakTo: 'poison', flying: true, blink: { distance: 70, cooldown: 3.5 },
+    look: { body: 'wisp', features: ['glow', 'flame'] },
+  },
+  baal: {
+    id: 'baal', name: 'Baal, Warden of the Gate', hp: 9000, speed: 30, bounty: 1500, radius: 24, lives: 5,
+    armor: 0.6, magicResist: 0.4, color: '#5a2a7a', boss: true, regen: 25, weakTo: 'arcane', enrage: true,
+    summons: { at: 0.5, type: 'hellhound', count: 6 },
+    look: { body: 'big', features: ['horns', 'helmet', 'pads', 'club', 'crown', 'glow'] },
+  },
+
+  // --- Level 7: Neon Sprawl ---
+  neonShade: {
+    id: 'neonShade', name: 'Neon Shade', hp: 220, speed: 100, bounty: 36, radius: 9,
+    armor: 0, magicResist: 0.7, color: '#ff2d95', dodge: 0.35, element: 'storm', weakTo: 'poison',
+    look: { body: 'wisp', features: ['glow', 'hat'] },
+  },
+  succubus: {
+    id: 'succubus', name: 'Succubus', hp: 520, speed: 70, bounty: 60, radius: 10,
+    armor: 0.1, magicResist: 0.5, color: '#c13fd6', heal: { radius: 70, hps: 6 }, curse: { every: 6, duration: 2.5 },
+    look: { body: 'round', features: ['wings', 'horns', 'glow', 'scarf'] },
+  },
+  chainFiend: {
+    id: 'chainFiend', name: 'Chain Fiend', hp: 560, speed: 60, bounty: 80, radius: 12, lives: 2,
+    armor: 0.5, magicResist: 0.1, color: '#4a6fa5', charge: 1.6, weakTo: 'storm',
+    look: { body: 'long', features: ['wolf', 'spikes', 'helmet'] },
+  },
+  voidSpawner: {
+    id: 'voidSpawner', name: 'Void Spawner', hp: 1800, speed: 22, bounty: 200, radius: 18, lives: 3,
+    armor: 0.4, magicResist: 0.4, color: '#3b1f6b', regen: 10, weakTo: 'fire', spawner: { type: 'cinderling', every: 5, count: 2 },
+    look: { body: 'big', features: ['shell', 'glow', 'tusks'] },
+  },
+  nyx: {
+    id: 'nyx', name: 'Nyx, the Neon Queen', hp: 11000, speed: 34, bounty: 2200, radius: 23, lives: 5,
+    armor: 0.3, magicResist: 0.6, color: '#ff2d95', boss: true, shield: 1600, element: 'storm', weakTo: 'poison',
+    blink: { distance: 60, cooldown: 7 }, summons: { at: 0.5, type: 'neonShade', count: 8 },
+    look: { body: 'big', features: ['wings', 'crown', 'glow', 'scarf', 'horns'] },
+  },
+
+  // --- Level 8: Throne of the Pit ---
+  pitLord: {
+    id: 'pitLord', name: 'Pit Lord', hp: 2000, speed: 32, bounty: 240, radius: 18, lives: 3,
+    armor: 0.7, magicResist: 0.3, color: '#7a1f1f', regen: 14, element: 'fire', immune: ['burn'], weakTo: 'ice', enrage: true,
+    look: { body: 'big', features: ['horns', 'pads', 'club', 'flame'] },
+  },
+  fallenAngel: {
+    id: 'fallenAngel', name: 'Fallen Angel', hp: 500, speed: 80, bounty: 90, radius: 10,
+    armor: 0.2, magicResist: 0.5, color: '#e8e2d4', flying: true, shield: 200, heal: { radius: 80, hps: 8 }, weakTo: 'arcane',
+    look: { body: 'wisp', features: ['wings', 'halo', 'glow'] },
+  },
+  magmaSerpent: {
+    id: 'magmaSerpent', name: 'Magma Serpent', hp: 800, speed: 75, bounty: 110, radius: 12, lives: 2,
+    armor: 0.35, magicResist: 0.4, color: '#ff6a00', element: 'fire', immune: ['burn'], weakTo: 'ice', charge: 1.5, dodge: 0.15,
+    look: { body: 'long', features: ['spikes', 'flame', 'tooth'] },
+  },
+  doomCultist: {
+    id: 'doomCultist', name: 'Doom Cultist', hp: 300, speed: 65, bounty: 48, radius: 9,
+    armor: 0, magicResist: 0.6, color: '#2b1f3a', curse: { every: 7, duration: 3 }, explode: { damage: 40, radius: 50 },
+    look: { body: 'round', features: ['hood', 'glow', 'staff'] },
+  },
+  moloch: {
+    id: 'moloch', name: 'Moloch, Lord of the Pit', hp: 16000, speed: 28, bounty: 4000, radius: 26, lives: 10,
+    armor: 0.5, magicResist: 0.5, color: '#ff3b2f', boss: true, shield: 2500, regen: 45, element: 'fire', immune: ['burn'], weakTo: 'ice', enrage: true,
+    summons: { at: 0.5, type: 'fallenAngel', count: 4 }, curse: { every: 8, duration: 3 },
+    look: { body: 'big', features: ['horns', 'wings', 'crown', 'flame', 'spikes', 'glow'] },
+  },
 };
 
 // --- Heroes ----------------------------------------------------------------------
@@ -442,3 +564,8 @@ export const HERO_TYPES = {
       desc: 'Holy ground scorches and stuns nearby foes and mends his bones.' },
   },
 };
+
+// Which towers a player may build, given how many chapters they have beaten.
+export function unlockedTowers(levelsBeaten) {
+  return Object.values(TOWER_TYPES).filter((t) => (t.unlockAfter ?? -1) < levelsBeaten).map((t) => t.id);
+}

@@ -42,6 +42,7 @@ export function render(ctx, game, effects, ui, time) {
   drawParticleList(ctx, effects.groundParticles);
   drawBuildSpots(ctx, game, ui, time);
   drawDecorations(ctx, scene.decor, level.theme, time);
+  drawGravityFields(ctx, game, time);
   drawTowers(ctx, game, ui, time);
   drawEnemies(ctx, game, time);
   drawHero(ctx, game, ui, time);
@@ -52,6 +53,7 @@ export function render(ctx, game, effects, ui, time) {
   drawCloudShadows(ctx, scene.clouds, level, time);
   drawBeaconAuras(ctx, game, time);
   drawParticleList(ctx, effects.particles, true);
+  if (level.theme.underworld) drawUnderworldLights(ctx, game, scene, time);
   ctx.restore();
   drawVignette(ctx, scene.vignette, level);
   if (effects.flash) {
@@ -111,6 +113,17 @@ function getScene(game, dpr) {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   tracePath(ctx, game.path.waypoints);
+  if (theme.underworld) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = hexToRgba(theme.neon, 0.22);
+    ctx.lineWidth = 46;
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba(theme.neon, 0.3);
+    ctx.lineWidth = 36;
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.strokeStyle = theme.pathEdge;
   ctx.lineWidth = 34;
   ctx.stroke();
@@ -156,7 +169,7 @@ function makeVignette(level, dpr) {
   ctx.scale(dpr, dpr);
   const g = ctx.createRadialGradient(level.width / 2, level.height / 2, level.height * 0.45, level.width / 2, level.height / 2, level.width * 0.72);
   g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(10,8,20,0.42)');
+  g.addColorStop(1, level.theme.underworld ? 'rgba(2,2,12,0.7)' : 'rgba(10,8,20,0.42)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, level.width, level.height);
   return canvas;
@@ -409,6 +422,8 @@ function drawGroundTexture(ctx, level, rng) {
       ctx.quadraticCurveTo(x + 10, y + 3, x + 24 + rng() * 16, y);
       ctx.stroke();
     }
+  } else if (theme.underworld) {
+    drawUnderworldGround(ctx, level, theme, rng);
   } else if (theme.lava) {
     // Ash speckle and faint cooling-crust cracks.
     for (let i = 0; i < 2000; i++) {
@@ -564,6 +579,8 @@ function drawThemeGroundFeatures(ctx, game, rng) {
       const spot = findClearSpot(game, rng, 12, 4);
       if (spot) drawMossPatch(ctx, spot.x, spot.y, 14 + rng() * 18, rng);
     }
+  } else if (theme.underworld) {
+    // Cracks and runes come from the ground texture pass.
   } else if (theme.lava) {
     for (let i = 0; i < 9; i++) {
       const spot = findClearSpot(game, rng, 14);
@@ -607,6 +624,8 @@ function drawThemeSetPieces(ctx, game, rng) {
     place(4, 12, (x, y) => drawLog(ctx, x, y, rng, '#3f3024', false, true));
     place(3, 10, (x, y) => drawMushroomRing(ctx, x, y, rng));
     place(1, 30, (x, y) => drawStiltHut(ctx, x, y));
+  } else if (theme.underworld) {
+    drawUnderworldSetPieces(ctx, game, rng);
   } else if (theme.lava) {
     place(5, 14, (x, y) => drawBasaltColumns(ctx, x, y, rng));
     place(3, 16, (x, y) => drawFissure(ctx, x, y, rng));
@@ -1279,6 +1298,11 @@ function drawDecorations(ctx, decor, theme, time) {
       case 'iceshard': drawIceShard(ctx, d.x, d.y, time); break;
       case 'bones': drawBones(ctx, d.x, d.y); break;
       case 'vent': drawVent(ctx, d.x, d.y, time, d.seed); break;
+      case 'spire': drawBoneSpire(ctx, d.x, d.y, 0.8); break;
+      case 'skullpile': drawSkullPile(ctx, d.x, d.y, d.seed); break;
+      case 'brazier': drawBrazier(ctx, d.x, d.y, time, d.seed); break;
+      case 'chain': drawChains(ctx, d.x, d.y, mulberry32(Math.floor(d.seed * 997))); break;
+      case 'neonrune': drawNeonRune(ctx, d.x, d.y, time, d.seed, theme.neon || '#3af2ff'); break;
     }
     ctx.restore();
   }
@@ -1603,7 +1627,10 @@ function drawTowers(ctx, game, ui, time) {
     else if (tower.typeId === 'sniper') drawSniperTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
     else if (tower.typeId === 'venom') drawVenomTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
     else if (tower.typeId === 'beacon') drawBeaconTower(ctx, spot, time, tower.level);
+    else if (tower.typeId === 'gravity') drawGravityTower(ctx, spot, time, !!tower.fieldActive, tower.level);
+    else if (tower.typeId === 'missile') drawMissileTower(ctx, spot, time, tower.angle ?? -Math.PI / 2, tower.cooldown / stats.fireInterval, tower.level);
     ctx.restore();
+    if (tower.cursed > 0) drawCurse(ctx, spot, tower.cursed, time);
 
     // Level pips.
     ctx.fillStyle = '#ffd700';
@@ -4532,6 +4559,481 @@ function drawHeroPaladin(ctx, time, swing, stride) {
   ctx.restore();
 }
 
+// --- Part 2 towers -------------------------------------------------------------------
+
+// Gravity Well: a floating black orb inside rotating rings, over a pedestal
+// of cracked stone that bends the ground into a dark lens.
+function drawGravityTower(ctx, spot, time, active, level) {
+  const x = spot.x;
+  const y = spot.y - 14;
+  const r = 7 + level * 1.2;
+  // Cracked stone pedestal.
+  ctx.fillStyle = domeGradient(ctx, spot.x, spot.y, 13, '#5a5273', '#2b2740', '#15121f');
+  ctx.strokeStyle = '#0d0b12';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(spot.x, spot.y + 1, 13 + level, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(122,92,255,0.7)';
+  ctx.lineWidth = 1;
+  for (let k = 0; k < 4; k++) {
+    const a = k * 1.6 + 0.4;
+    ctx.beginPath();
+    ctx.moveTo(spot.x + Math.cos(a) * 4, spot.y + 1 + Math.sin(a) * 2);
+    ctx.lineTo(spot.x + Math.cos(a) * (12 + level), spot.y + 1 + Math.sin(a) * 5);
+    ctx.stroke();
+  }
+  // Lens of bent light under the orb.
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x, y + 8, 18 + level * 2, `rgba(122,92,255,${active ? 0.35 : 0.2})`);
+  // Rings.
+  const tilt = 0.35;
+  for (let k = 0; k < 2 + Math.min(level, 2); k++) {
+    const a = time * (1.2 + k * 0.5) * (k % 2 ? -1 : 1) + k;
+    ctx.strokeStyle = `rgba(${k % 2 ? '58,242,255' : '201,191,255'},${0.55 + (active ? 0.3 : 0)})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r + 5 + k * 3, (r + 5 + k * 3) * tilt, a, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // The orb: black heart, violet event horizon.
+  const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.3);
+  g.addColorStop(0, '#000000');
+  g.addColorStop(0.6, '#1a0f3a');
+  g.addColorStop(0.85, '#7a5cff');
+  g.addColorStop(1, 'rgba(122,92,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(201,191,255,${0.6 + Math.sin(time * 6) * 0.2})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  // Captured sparks orbiting fast.
+  ctx.fillStyle = '#ffffff';
+  for (let k = 0; k < 3 + level; k++) {
+    const a = time * 5 + (k / (3 + level)) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2) * 0.5, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// The well's field on the ground: a dark lens with inward-flowing dashes.
+function drawGravityFields(ctx, game, time) {
+  game.towers.forEach((tower, i) => {
+    if (!tower || tower.typeId !== 'gravity') return;
+    const spot = game.level.buildSpots[i];
+    const stats = game.towerStats(tower);
+    const rr = stats.range;
+    ctx.save();
+    const g = ctx.createRadialGradient(spot.x, spot.y, 0, spot.x, spot.y, rr);
+    g.addColorStop(0, 'rgba(20,10,50,0.35)');
+    g.addColorStop(0.7, 'rgba(60,30,120,0.18)');
+    g.addColorStop(1, 'rgba(122,92,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(spot.x, spot.y, rr, rr * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 3; k++) {
+      const t = ((time * 0.5 + k / 3) % 1);
+      ctx.strokeStyle = `rgba(122,92,255,${0.4 * t})`;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([6, 10]);
+      ctx.lineDashOffset = time * 20;
+      ctx.beginPath();
+      ctx.ellipse(spot.x, spot.y, rr * (1 - t), rr * 0.6 * (1 - t), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  });
+}
+
+// Missile Battery: an armoured launcher on a turntable, a rack of rockets,
+// a radar dish that sweeps, and exhaust scorch on the plate.
+function drawMissileTower(ctx, spot, time, angle, cooldownFrac, level) {
+  const x = spot.x;
+  const y = spot.y - 8;
+  // Plate with scorch.
+  ctx.fillStyle = domeGradient(ctx, x, y + 6, 15, '#6d747b', '#3a3f45', '#1b1f24');
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 7, 15 + level, 6.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x - 4, y + 8, 6, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ff3f8e';
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + time * 0.3;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * (13 + level), y + 7 + Math.sin(a) * 5.5, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Turntable and launcher box, rotated toward the target.
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  const recoil = Math.max(0, (cooldownFrac - 0.85) / 0.15) * 2;
+  ctx.translate(-recoil, 0);
+  const w = 20 + level * 2;
+  const h = 12 + level;
+  ctx.fillStyle = cylinderGradient(ctx, 0, 0, '#2a2f36', '#6d747b', '#4a5057');
+  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+  g.addColorStop(0, '#7a8188');
+  g.addColorStop(0.5, '#4a5057');
+  g.addColorStop(1, '#23272b');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, -w / 2, -h / 2, w, h, 3);
+  // Tube mouths: the rack, some loaded, some spent after firing.
+  const tubes = 2 + Math.min(level, 2);
+  for (let k = 0; k < tubes; k++) {
+    const ty = -h / 2 + 2.5 + (k * (h - 5)) / Math.max(1, tubes - 1);
+    const loaded = cooldownFrac < 0.6 || k % 2 === 0;
+    ctx.fillStyle = loaded ? '#ff3f8e' : '#15181b';
+    ctx.strokeStyle = '#0f1113';
+    ctx.beginPath();
+    ctx.arc(w / 2 - 1, ty, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    if (loaded) {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(w / 2 - 1.6, ty - 0.6, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // Magenta stripe and warning chevrons.
+  ctx.fillStyle = '#ff3f8e';
+  ctx.fillRect(-w / 2 + 2, -1, w - 8, 2);
+  ctx.fillStyle = '#ffd98a';
+  for (let k = 0; k < 3; k++) ctx.fillRect(-w / 2 + 3 + k * 4, h / 2 - 3, 2, 1.5);
+  ctx.restore();
+  // Radar dish sweeping on a mast.
+  ctx.strokeStyle = '#3a3f45';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x - 10 - level, y + 2);
+  ctx.lineTo(x - 10 - level, y - 12);
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(x - 10 - level, y - 13);
+  ctx.rotate(time * 2);
+  ctx.fillStyle = '#c9ced4';
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, 4.5, Math.PI * 0.6, Math.PI * 1.4);
+  ctx.lineTo(0, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x - 10 - level, y - 13, 5, `rgba(255,63,142,${0.4 + Math.sin(time * 4) * 0.2})`);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// Hexed tower overlay: a purple sigil ring with floating runes.
+function drawCurse(ctx, spot, cursed, time) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const a = Math.min(1, cursed * 2);
+  glowDisc(ctx, spot.x, spot.y - 12, 26, `rgba(193,63,214,${0.3 * a})`);
+  ctx.strokeStyle = `rgba(255,120,255,${0.8 * a})`;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([3, 3]);
+  ctx.lineDashOffset = -time * 25;
+  ctx.beginPath();
+  ctx.ellipse(spot.x, spot.y + 2, 20, 8, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = `rgba(255,150,255,${a})`;
+  ctx.font = 'bold 9px serif';
+  ctx.textAlign = 'center';
+  for (let k = 0; k < 3; k++) {
+    const ang = time * 2 + (k / 3) * Math.PI * 2;
+    ctx.fillText(['ᚦ', 'ᛉ', 'ᚷ'][k], spot.x + Math.cos(ang) * 16, spot.y - 20 + Math.sin(ang) * 6);
+  }
+  ctx.restore();
+}
+
+// --- Underworld theme ----------------------------------------------------------------
+
+// Ground: ash with glowing cracks and faint neon circuitry.
+function drawUnderworldGround(ctx, level, theme, rng) {
+  const w = level.width;
+  const h = level.height;
+  for (let i = 0; i < 2400; i++) {
+    ctx.globalAlpha = 0.2 + rng() * 0.4;
+    ctx.fillStyle = rng() > 0.8 ? '#4a4a6a' : '#0a0c18';
+    ctx.fillRect(rng() * w, rng() * h, 1.4, 1.4);
+  }
+  ctx.globalAlpha = 1;
+  // Glowing cracks.
+  const [cr, cg, cb] = hexToRgb(theme.neon);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 26; i++) {
+    let x = rng() * w;
+    let y = rng() * h;
+    const pts = [[x, y]];
+    for (let k = 0; k < 5; k++) {
+      x += (rng() - 0.5) * 40;
+      y += (rng() - 0.5) * 40;
+      pts.push([x, y]);
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.18)`;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    pts.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.stroke();
+    ctx.strokeStyle = i % 3 ? `rgba(${cr},${cg},${cb},0.8)` : 'rgba(255,120,40,0.8)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // Faint circuitry lines.
+  ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.08)`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 40; i++) {
+    const x = rng() * w;
+    const y = rng() * h;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rng() > 0.5 ? 40 : 0), y);
+    ctx.lineTo(x + (rng() > 0.5 ? 40 : 0), y + 30);
+    ctx.stroke();
+  }
+}
+
+// Set pieces: bone spires, braziers, chains, neon rune circles, skull piles.
+function drawUnderworldSetPieces(ctx, game, rng) {
+  const { level } = game;
+  for (let i = 0; i < 3; i++) {
+    const p = findClearSpot(game, rng, 40, 20);
+    if (p) drawRuneCircle(ctx, p.x, p.y, 26 + rng() * 14, level.theme.neon, rng);
+  }
+  for (let i = 0; i < 2; i++) {
+    const p = findClearSpot(game, rng, 36, 20);
+    if (p) drawBoneSpire(ctx, p.x, p.y, 1.4 + rng() * 0.6);
+  }
+  const p = findClearSpot(game, rng, 44, 20);
+  if (p) drawChains(ctx, p.x, p.y, rng);
+}
+
+function drawRuneCircle(ctx, x, y, r, neon, rng) {
+  const [cr, cg, cb] = hexToRgb(neon);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.55)`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * 0.7, r * 0.32, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + rng() * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.32);
+    ctx.lineTo(x + Math.cos(a + 2.1) * r * 0.7, y + Math.sin(a + 2.1) * r * 0.32);
+    ctx.stroke();
+  }
+  ctx.fillStyle = `rgba(${cr},${cg},${cb},0.9)`;
+  ctx.font = '9px serif';
+  ctx.textAlign = 'center';
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    ctx.fillText(['ᚠ', 'ᚢ', 'ᚦ', 'ᚨ', 'ᚱ', 'ᚲ', 'ᚷ', 'ᚹ'][k], x + Math.cos(a) * r * 0.86, y + Math.sin(a) * r * 0.39 + 3);
+  }
+  glowDisc(ctx, x, y, r * 1.2, `rgba(${cr},${cg},${cb},0.12)`);
+  ctx.restore();
+}
+
+function drawBoneSpire(ctx, x, y, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 14, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const g = ctx.createLinearGradient(-8, 0, 8, 0);
+  g.addColorStop(0, '#6b6354');
+  g.addColorStop(0.5, '#d9d0b8');
+  g.addColorStop(1, '#4a4438');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#2b2620';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-9, 2);
+  ctx.quadraticCurveTo(-5, -20, 1, -44);
+  ctx.quadraticCurveTo(5, -22, 9, 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Rib hooks.
+  ctx.fillStyle = '#d9d0b8';
+  for (let k = 0; k < 4; k++) {
+    const yy = -8 - k * 8;
+    const side = k % 2 ? 1 : -1;
+    ctx.beginPath();
+    ctx.moveTo(side * 4, yy);
+    ctx.quadraticCurveTo(side * 12, yy - 2, side * 10, yy - 9);
+    ctx.quadraticCurveTo(side * 9, yy - 3, side * 3, yy - 3);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Skull at the base.
+  ctx.fillStyle = '#e9e2d0';
+  ctx.beginPath();
+  ctx.arc(-11, -2, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1b1f24';
+  ctx.beginPath();
+  ctx.arc(-12.3, -2.6, 1, 0, Math.PI * 2);
+  ctx.arc(-9.7, -2.6, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawChains(ctx, x, y, rng) {
+  ctx.save();
+  ctx.strokeStyle = '#5c6268';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  for (let c = 0; c < 2; c++) {
+    const x0 = x - 40 + c * 10;
+    const y0 = y - 10 + c * 14;
+    const x1 = x + 44 - c * 6;
+    const y1 = y + 4 + c * 10;
+    const steps = 10;
+    for (let k = 0; k < steps; k++) {
+      const t0 = k / steps;
+      const t1 = (k + 1) / steps;
+      const sag = (t) => Math.sin(t * Math.PI) * 12;
+      ctx.beginPath();
+      ctx.ellipse(x0 + (x1 - x0) * (t0 + t1) / 2, y0 + (y1 - y0) * (t0 + t1) / 2 + sag((t0 + t1) / 2), 4, 2.2, Math.atan2(y1 - y0, x1 - x0), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Anchor rings.
+    ctx.fillStyle = '#3a3f45';
+    ctx.beginPath();
+    ctx.arc(x0, y0, 3.5, 0, Math.PI * 2);
+    ctx.arc(x1, y1, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawSkullPile(ctx, x, y, seed) {
+  const rng = mulberry32(Math.floor(seed * 1000));
+  for (let k = 0; k < 6; k++) {
+    const sx = x + (rng() - 0.5) * 18;
+    const sy = y - rng() * 8;
+    const r = 3 + rng() * 2;
+    ctx.fillStyle = k % 3 ? '#d9d0b8' : '#b8ae95';
+    ctx.strokeStyle = '#4a4438';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#1b1f24';
+    ctx.beginPath();
+    ctx.arc(sx - r * 0.35, sy - r * 0.15, r * 0.25, 0, Math.PI * 2);
+    ctx.arc(sx + r * 0.35, sy - r * 0.15, r * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBrazier(ctx, x, y, time, seed) {
+  // Iron tripod bowl with live flame.
+  ctx.strokeStyle = '#2e3136';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y + 4);
+  ctx.lineTo(x - 3, y - 6);
+  ctx.moveTo(x + 6, y + 4);
+  ctx.lineTo(x + 3, y - 6);
+  ctx.moveTo(x, y + 5);
+  ctx.lineTo(x, y - 6);
+  ctx.stroke();
+  ctx.fillStyle = cylinderGradient(ctx, x - 8, x + 8, '#2e3136', '#6d747b', '#4a5057');
+  ctx.strokeStyle = '#15181b';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y - 8);
+  ctx.quadraticCurveTo(x, y + 1, x + 8, y - 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x, y - 12, 16, `rgba(255,140,50,${0.35 + Math.sin(time * 7 + seed) * 0.12})`);
+  for (let f = 0; f < 3; f++) {
+    const lean = Math.sin(time * 5 + f + seed) * 0.3;
+    drawFlameTongue(ctx, x + (f - 1) * 3, y - 9, -Math.PI / 2 + lean, 10 + Math.sin(time * 9 + f) * 3, 3.2, time, f + seed);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawNeonRune(ctx, x, y, time, seed, neon) {
+  const [cr, cg, cb] = hexToRgb(neon);
+  const pulse = 0.5 + Math.sin(time * 2 + seed * 3) * 0.3;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x, y, 10, `rgba(${cr},${cg},${cb},${0.25 * pulse})`);
+  ctx.fillStyle = `rgba(${cr},${cg},${cb},${0.6 + pulse * 0.4})`;
+  ctx.font = 'bold 11px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(['ᛟ', 'ᛞ', 'ᛇ', 'ᛈ', 'ᛚ'][Math.floor(seed) % 5], x, y + 4);
+  ctx.restore();
+}
+
+// Lighting pass for the underworld: lava and braziers cast warm light, neon
+// runes cast cold light, and a heavier vignette closes in around them.
+function drawUnderworldLights(ctx, game, scene, time) {
+  const { level } = game;
+  const theme = level.theme;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const w of level.water) {
+    glowDisc(ctx, w.x, w.y, Math.max(w.rx, w.ry) * 1.6, `rgba(255,120,30,${0.14 + Math.sin(time * 1.5 + w.x) * 0.04})`);
+  }
+  for (const d of scene.decor) {
+    if (d.kind === 'brazier') glowDisc(ctx, d.x, d.y - 10, 42, `rgba(255,150,60,${0.16 + Math.sin(time * 6 + d.seed) * 0.05})`);
+  }
+  const [cr, cg, cb] = hexToRgb(theme.neon);
+  for (const d of scene.decor) {
+    if (d.kind === 'neonrune') glowDisc(ctx, d.x, d.y, 30, `rgba(${cr},${cg},${cb},0.1)`);
+  }
+  // Towers cast a little light of their own colour.
+  game.towers.forEach((tower, i) => {
+    if (!tower) return;
+    const spot = level.buildSpots[i];
+    const [tr, tg, tb] = hexToRgb(game.towerTypes[tower.typeId].color);
+    glowDisc(ctx, spot.x, spot.y - 10, 40, `rgba(${tr},${tg},${tb},0.1)`);
+  });
+  ctx.restore();
+}
+
 // --- Enemies: sprite composer ------------------------------------------------
 
 function drawEnemies(ctx, game, time) {
@@ -4604,6 +5106,8 @@ function drawEnemySprite(ctx, game, enemy, pos, facing, time) {
     if (has('hat')) drawHat(ctx, x, y, r, facing);
     if (has('flame')) drawFlame(ctx, x, y, r, time, enemy.id);
     if (has('staff')) drawStaff(ctx, x, y, r, facing, time);
+    if (has('hood')) drawHood(ctx, type.color, x, y, r, facing);
+    if (has('halo')) drawHalo(ctx, x, y, r, time);
 
     // Face.
     if (has('wolf')) drawWolfFace(ctx, type.color, x, y, r, facing);
@@ -4812,6 +5316,48 @@ function drawStaff(ctx, x, y, r, facing, time) {
   ctx.globalCompositeOperation = 'lighter';
   glowDisc(ctx, sx + r * 0.1 * facing, y - r * 1.65, r * 0.7, `rgba(140,255,120,${0.35 + Math.sin(time * 4) * 0.15})`);
   ctx.globalCompositeOperation = 'source-over';
+}
+
+// Deep hood with a glowing void where a face should be.
+function drawHood(ctx, color, x, y, r, facing) {
+  ctx.fillStyle = darken(color, 0.3);
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.95, y + r * 0.1);
+  ctx.quadraticCurveTo(x - r * 0.9, y - r * 1.25, x + r * 0.15 * facing, y - r * 1.35);
+  ctx.quadraticCurveTo(x + r * 0.95, y - r * 1.2, x + r * 0.95, y + r * 0.1);
+  ctx.quadraticCurveTo(x + r * 0.4 * facing, y - r * 0.4, x, y - r * 0.35);
+  ctx.quadraticCurveTo(x - r * 0.4 * facing, y - r * 0.4, x - r * 0.95, y + r * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#05030a';
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.1 * facing, y - r * 0.55, r * 0.42, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x + r * 0.2 * facing, y - r * 0.55, r * 0.35, 'rgba(193,63,214,0.9)');
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// A tarnished halo floating over a fallen angel.
+function drawHalo(ctx, x, y, r, time) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const hy = y - r * 1.5 + Math.sin(time * 3) * 1.5;
+  glowDisc(ctx, x, hy, r * 0.9, 'rgba(255,220,120,0.35)');
+  ctx.strokeStyle = 'rgba(255,230,150,0.95)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(x, hy, r * 0.75, r * 0.25, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,60,20,0.8)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(x, hy, r * 0.75, r * 0.25, 0, 0.4, 1.4);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // A painted war mask over the face.
@@ -5244,6 +5790,42 @@ function drawProjectiles(ctx, game) {
       ctx.globalCompositeOperation = 'lighter';
       glowDisc(ctx, proj.x, proj.y, 7 * scale, 'rgba(143,211,58,0.35)');
       ctx.globalCompositeOperation = 'source-over';
+    } else if (proj.towerType === 'missile') {
+      // Rocket: finned body along its heading, bright exhaust behind.
+      ctx.save();
+      ctx.translate(proj.x, proj.y);
+      ctx.rotate(ang);
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, -7 * scale, 0, 6 * scale, 'rgba(255,180,80,0.8)');
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#c9ced4';
+      ctx.strokeStyle = '#2e3136';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(7 * scale, 0);
+      ctx.lineTo(2 * scale, -2.4 * scale);
+      ctx.lineTo(-6 * scale, -2.4 * scale);
+      ctx.lineTo(-6 * scale, 2.4 * scale);
+      ctx.lineTo(2 * scale, 2.4 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ff3f8e';
+      ctx.beginPath();
+      ctx.moveTo(7 * scale, 0);
+      ctx.lineTo(2 * scale, -2.4 * scale);
+      ctx.lineTo(2 * scale, 2.4 * scale);
+      ctx.closePath();
+      ctx.fill();
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(-6 * scale, side * 2.4 * scale);
+        ctx.lineTo(-8 * scale, side * 5 * scale);
+        ctx.lineTo(-3 * scale, side * 2.4 * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
     } else if (proj.towerType === 'mage') {
       // Arcane bolt: comet trail, haloed orb, spinning rune cross.
       ctx.globalCompositeOperation = 'lighter';

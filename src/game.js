@@ -51,6 +51,8 @@ export function describeTraits(type) {
   if (type.split) out.push('Splits');
   if (type.explode) out.push('Explodes');
   if (type.blink) out.push('Blinks');
+  if (type.curse) out.push('Hexes towers');
+  if (type.spawner) out.push('Spawns brood');
   if (type.summons) out.push('Summons');
   if (type.enrage) out.push('Enrages');
   return out;
@@ -78,6 +80,8 @@ export function waveWarnings(types) {
   add((t) => t.explode, 'Explodes', 'keep your hero clear');
   add((t) => t.blink, 'Blinks', 'leaps forward along the road');
   add((t) => t.charge, 'Charges', 'runs when wounded');
+  add((t) => t.curse, 'Hexes towers', 'silences the nearest tower for a moment');
+  add((t) => t.spawner, 'Spawns brood', 'keeps birthing more while it lives');
   return out;
 }
 
@@ -288,6 +292,10 @@ export class Game {
       dodge: type.dodge || 0,
       charged: false,
       blinkTimer: type.blink ? type.blink.cooldown : 0,
+      curseTimer: type.curse ? type.curse.every * 0.6 : 0,
+      spawnTimer: type.spawner ? type.spawner.every : 0,
+      gravity: 0, // seconds left of a gravity well's drag
+      gravityFactor: 1,
     };
     this.enemies.push(enemy);
     const pos = this.path.positionAt(dist);
@@ -371,8 +379,41 @@ export class Game {
           this.pushEvent({ type: 'blink', x: from.x, y: from.y, toX: to.x, toY: to.y, enemyType: enemy.typeId });
         }
       }
+      // Curses hex the nearest tower; spawners birth more enemies.
+      if (type.curse && this.towers.some(Boolean)) {
+        enemy.curseTimer -= dt;
+        if (enemy.curseTimer <= 0) {
+          enemy.curseTimer = type.curse.every;
+          const pos = this.path.positionAt(enemy.dist);
+          let best = -1;
+          let bestD = 170;
+          this.towers.forEach((tower, i) => {
+            if (!tower) return;
+            const spot = this.level.buildSpots[i];
+            const d = Math.hypot(spot.x - pos.x, spot.y - pos.y);
+            if (d < bestD) { bestD = d; best = i; }
+          });
+          if (best >= 0) {
+            this.towers[best].cursed = type.curse.duration;
+            this.towers[best].beamTargetId = null;
+            const spot = this.level.buildSpots[best];
+            this.pushEvent({ type: 'tower-cursed', x: spot.x, y: spot.y, fromX: pos.x, fromY: pos.y, duration: type.curse.duration, enemyType: enemy.typeId });
+          }
+        }
+      }
+      if (type.spawner) {
+        enemy.spawnTimer -= dt;
+        if (enemy.spawnTimer <= 0) {
+          enemy.spawnTimer = type.spawner.every;
+          for (let i = 0; i < type.spawner.count; i++) this.spawnEnemy(type.spawner.type, Math.max(0, enemy.dist - 10 - i * 10));
+          const pos = this.path.positionAt(enemy.dist);
+          this.pushEvent({ type: 'spawned-brood', x: pos.x, y: pos.y, enemyType: enemy.typeId, count: type.spawner.count });
+        }
+      }
+      if (enemy.gravity > 0) enemy.gravity -= dt;
       if (enemy.blocked) continue; // held in melee by the hero
-      enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
+      const drag = enemy.gravity > 0 ? enemy.gravityFactor : 1;
+      enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * drag * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
         enemy.leaked = true;
@@ -413,7 +454,16 @@ export class Game {
       tower.age = (tower.age || 0) + dt; // seconds since built/upgraded, for the renderer
       const boost = tower.boost || 1;
 
+      if (tower.cursed > 0) {
+        tower.cursed -= dt; // hexed: fires nothing
+        tower.beamTargetId = null;
+        continue;
+      }
       if (attack === 'aura') continue;
+      if (attack === 'field') {
+        this.updateField(tower, type, stats, spot, dt, boost);
+        continue;
+      }
       if (attack === 'beam') {
         this.updateBeam(tower, type, stats, spot, dt, boost);
         continue;
@@ -423,12 +473,19 @@ export class Game {
       if (tower.cooldown > 0) continue;
       const target = this.findTarget(spot, stats.range, { minRange: stats.minRange, mode: type.targeting, ground: type.targets === 'ground' });
       if (!target) continue;
+      // Salvo weapons fire several shots a tenth of a second apart.
+      if (stats.salvo > 1 && !tower.salvoLeft) tower.salvoLeft = stats.salvo;
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
       tower.targetX = pos.x; // where the shot went, for continuous effects like the flame jet
       tower.targetY = pos.y;
-      tower.cooldown = stats.fireInterval;
+      if (tower.salvoLeft) {
+        tower.salvoLeft -= 1;
+        tower.cooldown = tower.salvoLeft > 0 ? 0.1 : stats.fireInterval;
+      } else {
+        tower.cooldown = stats.fireInterval;
+      }
       this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level, targetX: pos.x, targetY: pos.y });
 
       if (attack === 'projectile') {
@@ -493,6 +550,22 @@ export class Game {
       current = next;
     }
     this.pushEvent({ type: 'zap', points, towerType: tower.typeId, level: tower.level });
+  }
+
+  // A gravity well drags every enemy in its field and, at full power,
+  // crushes them with a steady pulse of true damage.
+  updateField(tower, type, stats, spot, dt, boost = 1) {
+    let caught = 0;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      if (Math.hypot(pos.x - spot.x, pos.y - spot.y) > stats.range + enemy.radius) continue;
+      caught += 1;
+      enemy.gravityFactor = enemy.gravity > 0 ? Math.min(enemy.gravityFactor, stats.slow) : stats.slow;
+      enemy.gravity = 0.2;
+      if (stats.pulse) this.damageEnemy(enemy, stats.pulse * boost * dt, 'true', { flash: false });
+    }
+    tower.fieldActive = caught > 0;
   }
 
   // A beam stays on its target while it can and ramps up the longer it holds.

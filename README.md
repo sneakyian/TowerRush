@@ -12,6 +12,26 @@ trail leads to the dragon Vexarion himself. Each chapter opens with a
 briefing, each boss has words for you, and the tale closes after the
 caldera.
 
+## Part II: The Underworld
+
+Beating the caldera opens the stairs beneath it. Three more chapters take
+the war into hell itself: the **Gates of Dis**, the lit city of the
+**Neon Sprawl**, and the **Throne of the Pit**, each a dark-blue map cut
+by rivers of fire, bone spires, braziers, chains and glowing runes, with
+its own synthwave soundtrack. Part II is much harder: enemies arrive with
+more health, more abilities and bigger bosses, and you arrive with more
+gold and new engines of war:
+
+| Tower               | Unlocks       | What it does                                                      |
+| ------------------- | ------------- | ----------------------------------------------------------------- |
+| **Gravity Well**    | After Ch. 5   | Bends the ground: everything in its field crawls (fliers too); tier 4 crushes with true damage |
+| **Missile Battery** | After Ch. 6   | Salvos of homing rockets that reach the sky and burst on impact    |
+
+New enemy tricks down there: **succubi** and **doom cultists** hex your
+nearest tower silent for a moment, **void spawners** keep birthing
+cinderlings while they live, and the bosses, Baal, Nyx and Moloch, combine
+every trick from above.
+
 ## How to play
 
 **Easiest:** double-click `play.html` — a self-contained build that runs
@@ -137,11 +157,19 @@ Every boss is tougher than before and fights in phases:
 
 ### Levels
 
+Part I:
+
 1. **Greenfields** — goblins, wolves, orcs. Boss: Orc Warlord
 2. **Frostpeak Pass** — snow wolves, ice sprites, yetis, frost trolls. Boss: Frost Giant
 3. **Sunscorch Desert** — scorpions, bandits, dune wasps, sand golems. Boss: Sand Wyrm
 4. **Murkwater Swamp** — bog frogs, will-o-wisps, swamp witches, bog trolls. Boss: Hydra
 5. **Ember Caldera** — fire imps, lava hounds, ash wraiths, obsidian golems. Boss: Ember Dragon
+
+Part II:
+
+6. **Gates of Dis** — cinderlings, hellhounds, soul wisps, gate golems. Boss: Baal, Warden of the Gate
+7. **Neon Sprawl** — neon shades, succubi, chain fiends, void spawners. Boss: Nyx, the Neon Queen
+8. **Throne of the Pit** — doom cultists, magma serpents, fallen angels, pit lords. Boss: Moloch, Lord of the Pit
 
 ## Project layout
 
@@ -149,7 +177,7 @@ Every boss is tougher than before and fights in phases:
 index.html       Page, HUD, level select, and styles
 play.html        Generated single-file build (npm run build)
 src/config.js    Tower tiers and the full enemy roster (stats + sprite look)
-src/levels.js    The five levels: paths, spots, water, themes, waves
+src/levels.js    The eight levels in two parts: paths, spots, water, themes, waves
 src/story.js     Campaign prologue, chapter briefings, boss taunts, epilogue
 src/path.js      Polyline path addressed by distance
 src/game.js      Core simulation incl. heroes (no DOM — runs in Node for tests)

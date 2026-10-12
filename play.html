@@ -144,6 +144,11 @@
     #story-lines p { margin: 0 0 10px; line-height: 1.45; font-size: 1rem; }
     #story-lines p strong { color: #7a1f1f; font-variant: small-caps; margin-right: 6px; }
     #story-next { display: block; margin: 12px auto 0; background: linear-gradient(180deg, #c98f36, #8a5e22); color: #fff4d6; border-color: #5a3c14; font-family: Georgia, serif; font-size: 1rem; padding: 8px 22px; }
+    .part-head { width: 100%; text-align: center; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.8rem; opacity: 0.85; margin: 6px 0 2px; }
+    .part-head.part-2 { color: #3af2ff; text-shadow: 0 0 10px rgba(58,242,255,0.6); }
+    .level-btn.underworld { border-color: var(--neon); box-shadow: 0 0 12px color-mix(in srgb, var(--neon) 55%, transparent); background: rgba(10,8,24,0.6); }
+    .level-btn.underworld:hover:not(:disabled) { background: rgba(58,242,255,0.12); }
+    button[data-type].locked { background: #2a2a33; color: #8a8f99; box-shadow: none; border-style: dashed; }
     [hidden] { display: none !important; }
   </style>
 </head>
@@ -374,6 +379,41 @@ const TOWER_TYPES = {
       { cost: 540, dps: 110, range: 140, rampTime: 2.2, rampMultiplier: 3.2 },
     ],
   },
+  // --- Part 2 towers, unlocked as the underworld campaign opens ---
+  gravity: {
+    id: 'gravity',
+    name: 'Gravity Well',
+    desc: 'Warps the ground: everything in its field crawls. Does not stack with chill, and never freezes a shatter.',
+    damageType: 'true',
+    attack: 'field',
+    color: '#7a5cff',
+    unlockAfter: 4, // playable once the fifth chapter (index 4) is beaten
+    // slow: speed multiplier inside the field; pulse: true damage per second
+    // to everything in the field (tier 4 only).
+    levels: [
+      { cost: 150, range: 80, slow: 0.6, pulse: 0 },
+      { cost: 240, range: 95, slow: 0.5, pulse: 0 },
+      { cost: 350, range: 110, slow: 0.4, pulse: 0 },
+      { cost: 480, range: 125, slow: 0.3, pulse: 18 },
+    ],
+  },
+  missile: {
+    id: 'missile',
+    name: 'Missile Battery',
+    desc: 'Salvos of homing rockets that reach the sky and burst on impact.',
+    damageType: 'physical',
+    attack: 'projectile',
+    projectileSpeed: 260,
+    color: '#ff3f8e',
+    unlockAfter: 5,
+    // salvo: rockets per volley, fired a tenth of a second apart.
+    levels: [
+      { cost: 200, damage: 40, range: 150, fireInterval: 1.6, splashRadius: 30, salvo: 2, armorPierce: 0.3 },
+      { cost: 320, damage: 65, range: 160, fireInterval: 1.5, splashRadius: 34, salvo: 3, armorPierce: 0.35 },
+      { cost: 460, damage: 100, range: 170, fireInterval: 1.4, splashRadius: 38, salvo: 3, armorPierce: 0.4 },
+      { cost: 640, damage: 150, range: 185, fireInterval: 1.3, splashRadius: 44, salvo: 4, armorPierce: 0.5 },
+    ],
+  },
   beacon: {
     id: 'beacon',
     name: 'War Beacon',
@@ -416,6 +456,8 @@ const MAX_TOWER_LEVEL = 4;
 //   split     on death spawns { count } of { type }
 //   explode   on death burns the hero within { radius } for { damage }
 //   blink     every { cooldown }s leaps { distance } along the road
+//   curse     every { every }s hexes the nearest tower for { duration }s
+//   spawner   every { every }s births { count } of { type } beside it
 // `look` drives the sprite composer in render.js:
 //   body: 'round' | 'long' | 'big' | 'wisp'
 //   features: any of ears, club, tooth, wolf, helmet, pads, tusks, shell,
@@ -594,6 +636,91 @@ const ENEMY_TYPES = {
     shield: 900, element: 'fire', immune: ['burn'], weakTo: 'ice', regen: 20, enrage: true,
     summons: { at: 0.5, type: 'fireImp', count: 10 },
   },
+
+  // ===== Part 2: The Underworld =====
+  // --- Level 6: Gates of Dis ---
+  hellhound: {
+    id: 'hellhound', name: 'Hellhound', hp: 260, speed: 95, bounty: 34, radius: 11,
+    armor: 0.3, magicResist: 0.3, color: '#b8321f', element: 'fire', immune: ['burn'], weakTo: 'ice', charge: 1.5,
+    look: { body: 'long', features: ['wolf', 'flame', 'spikes'] },
+  },
+  cinderling: {
+    id: 'cinderling', name: 'Cinderling', hp: 100, speed: 125, bounty: 16, radius: 7,
+    armor: 0, magicResist: 0.5, color: '#ff7a2a', element: 'fire', immune: ['burn'], weakTo: 'ice', explode: { damage: 30, radius: 44 },
+    look: { body: 'round', features: ['flame', 'tooth', 'horns'] },
+  },
+  gateGolem: {
+    id: 'gateGolem', name: 'Gate Golem', hp: 1100, speed: 30, bounty: 140, radius: 17, lives: 2,
+    armor: 0.65, magicResist: 0.2, color: '#2a2f4a', regen: 8, weakTo: 'storm', split: { type: 'cinderling', count: 3 },
+    look: { body: 'round', features: ['shell', 'spikes', 'glow'] },
+  },
+  soulWisp: {
+    id: 'soulWisp', name: 'Soul Wisp', hp: 200, speed: 110, bounty: 30, radius: 8,
+    armor: 0, magicResist: 0.8, color: '#3af2ff', shield: 120, element: 'storm', weakTo: 'poison', flying: true, blink: { distance: 70, cooldown: 3.5 },
+    look: { body: 'wisp', features: ['glow', 'flame'] },
+  },
+  baal: {
+    id: 'baal', name: 'Baal, Warden of the Gate', hp: 9000, speed: 30, bounty: 1500, radius: 24, lives: 5,
+    armor: 0.6, magicResist: 0.4, color: '#5a2a7a', boss: true, regen: 25, weakTo: 'arcane', enrage: true,
+    summons: { at: 0.5, type: 'hellhound', count: 6 },
+    look: { body: 'big', features: ['horns', 'helmet', 'pads', 'club', 'crown', 'glow'] },
+  },
+
+  // --- Level 7: Neon Sprawl ---
+  neonShade: {
+    id: 'neonShade', name: 'Neon Shade', hp: 220, speed: 100, bounty: 36, radius: 9,
+    armor: 0, magicResist: 0.7, color: '#ff2d95', dodge: 0.35, element: 'storm', weakTo: 'poison',
+    look: { body: 'wisp', features: ['glow', 'hat'] },
+  },
+  succubus: {
+    id: 'succubus', name: 'Succubus', hp: 520, speed: 70, bounty: 60, radius: 10,
+    armor: 0.1, magicResist: 0.5, color: '#c13fd6', heal: { radius: 70, hps: 6 }, curse: { every: 6, duration: 2.5 },
+    look: { body: 'round', features: ['wings', 'horns', 'glow', 'scarf'] },
+  },
+  chainFiend: {
+    id: 'chainFiend', name: 'Chain Fiend', hp: 560, speed: 60, bounty: 80, radius: 12, lives: 2,
+    armor: 0.5, magicResist: 0.1, color: '#4a6fa5', charge: 1.6, weakTo: 'storm',
+    look: { body: 'long', features: ['wolf', 'spikes', 'helmet'] },
+  },
+  voidSpawner: {
+    id: 'voidSpawner', name: 'Void Spawner', hp: 1800, speed: 22, bounty: 200, radius: 18, lives: 3,
+    armor: 0.4, magicResist: 0.4, color: '#3b1f6b', regen: 10, weakTo: 'fire', spawner: { type: 'cinderling', every: 5, count: 2 },
+    look: { body: 'big', features: ['shell', 'glow', 'tusks'] },
+  },
+  nyx: {
+    id: 'nyx', name: 'Nyx, the Neon Queen', hp: 11000, speed: 34, bounty: 2200, radius: 23, lives: 5,
+    armor: 0.3, magicResist: 0.6, color: '#ff2d95', boss: true, shield: 1600, element: 'storm', weakTo: 'poison',
+    blink: { distance: 60, cooldown: 7 }, summons: { at: 0.5, type: 'neonShade', count: 8 },
+    look: { body: 'big', features: ['wings', 'crown', 'glow', 'scarf', 'horns'] },
+  },
+
+  // --- Level 8: Throne of the Pit ---
+  pitLord: {
+    id: 'pitLord', name: 'Pit Lord', hp: 2000, speed: 32, bounty: 240, radius: 18, lives: 3,
+    armor: 0.7, magicResist: 0.3, color: '#7a1f1f', regen: 14, element: 'fire', immune: ['burn'], weakTo: 'ice', enrage: true,
+    look: { body: 'big', features: ['horns', 'pads', 'club', 'flame'] },
+  },
+  fallenAngel: {
+    id: 'fallenAngel', name: 'Fallen Angel', hp: 500, speed: 80, bounty: 90, radius: 10,
+    armor: 0.2, magicResist: 0.5, color: '#e8e2d4', flying: true, shield: 200, heal: { radius: 80, hps: 8 }, weakTo: 'arcane',
+    look: { body: 'wisp', features: ['wings', 'halo', 'glow'] },
+  },
+  magmaSerpent: {
+    id: 'magmaSerpent', name: 'Magma Serpent', hp: 800, speed: 75, bounty: 110, radius: 12, lives: 2,
+    armor: 0.35, magicResist: 0.4, color: '#ff6a00', element: 'fire', immune: ['burn'], weakTo: 'ice', charge: 1.5, dodge: 0.15,
+    look: { body: 'long', features: ['spikes', 'flame', 'tooth'] },
+  },
+  doomCultist: {
+    id: 'doomCultist', name: 'Doom Cultist', hp: 300, speed: 65, bounty: 48, radius: 9,
+    armor: 0, magicResist: 0.6, color: '#2b1f3a', curse: { every: 7, duration: 3 }, explode: { damage: 40, radius: 50 },
+    look: { body: 'round', features: ['hood', 'glow', 'staff'] },
+  },
+  moloch: {
+    id: 'moloch', name: 'Moloch, Lord of the Pit', hp: 16000, speed: 28, bounty: 4000, radius: 26, lives: 10,
+    armor: 0.5, magicResist: 0.5, color: '#ff3b2f', boss: true, shield: 2500, regen: 45, element: 'fire', immune: ['burn'], weakTo: 'ice', enrage: true,
+    summons: { at: 0.5, type: 'fallenAngel', count: 4 }, curse: { every: 8, duration: 3 },
+    look: { body: 'big', features: ['horns', 'wings', 'crown', 'flame', 'spikes', 'glow'] },
+  },
 };
 
 // --- Heroes ----------------------------------------------------------------------
@@ -639,6 +766,11 @@ const HERO_TYPES = {
   },
 };
 
+// Which towers a player may build, given how many chapters they have beaten.
+function unlockedTowers(levelsBeaten) {
+  return Object.values(TOWER_TYPES).filter((t) => (t.unlockAfter ?? -1) < levelsBeaten).map((t) => t.id);
+}
+
 // The five levels. Each has its own path, build spots, water bodies, theme,
 // decoration set, and waves. The last wave of every level carries its boss.
 //
@@ -650,6 +782,7 @@ const LEVELS = [
   {
     ...SIZE,
     id: 'greenfields',
+    part: 1,
     name: 'Greenfields',
     subtitle: 'Goblins raid the farmland. Hold the road to the castle.',
     startingGold: 200,
@@ -688,6 +821,7 @@ const LEVELS = [
   {
     ...SIZE,
     id: 'frostpeak',
+    part: 1,
     name: 'Frostpeak Pass',
     subtitle: 'Yetis and ice sprites pour down the mountain switchbacks.',
     startingGold: 410,
@@ -727,6 +861,7 @@ const LEVELS = [
   {
     ...SIZE,
     id: 'sunscorch',
+    part: 1,
     name: 'Sunscorch Desert',
     subtitle: 'Armored scorpions and sand golems march through the dunes.',
     startingGold: 460,
@@ -768,6 +903,7 @@ const LEVELS = [
   {
     ...SIZE,
     id: 'murkwater',
+    part: 1,
     name: 'Murkwater Swamp',
     subtitle: 'Witches and wisps shrug off arrows in the misty bog.',
     startingGold: 560,
@@ -814,6 +950,7 @@ const LEVELS = [
   {
     ...SIZE,
     id: 'caldera',
+    part: 1,
     name: 'Ember Caldera',
     subtitle: 'The dragon\'s brood swarms out of the volcano.',
     startingGold: 800,
@@ -856,9 +993,153 @@ const LEVELS = [
       { entries: [{ type: 'fireImp', count: 16, interval: 0.45 }, { type: 'dragon', count: 1, interval: 3 }, { type: 'obsidianGolem', count: 6, interval: 1.7 }, { type: 'lavaHound', count: 12, interval: 0.5 }] },
     ],
   },
-];
+
 
 // Kept for backwards compatibility with existing imports and tests.
+
+  // ===================== Part II: The Underworld =====================
+  {
+    ...SIZE,
+    id: 'dis',
+    part: 2,
+    name: 'Gates of Dis',
+    subtitle: 'The road into hell. Hellhounds, cinderlings and the Warden of the Gate.',
+    startingGold: 3000,
+    startingLives: 20,
+    sellRefund: 0.5,
+    path: [
+      { x: -20, y: 400 }, { x: 150, y: 400 }, { x: 230, y: 300 }, { x: 150, y: 190 },
+      { x: 260, y: 90 }, { x: 420, y: 130 }, { x: 440, y: 290 }, { x: 560, y: 390 },
+      { x: 680, y: 300 }, { x: 650, y: 150 }, { x: 820, y: 90 },
+    ],
+    buildSpots: [
+      { x: 111, y: 360 }, { x: 250, y: 220 }, { x: 329, y: 70 }, { x: 350, y: 177 },
+      { x: 494, y: 240 }, { x: 544, y: 438 }, { x: 618, y: 207 }, { x: 723, y: 195 },
+      { x: 188, y: 433 }, { x: 713, y: 335 },
+    ],
+    water: [{ x: 90, y: 110, rx: 70, ry: 40 }, { x: 740, y: 440, rx: 55, ry: 30 }, { x: 420, y: 420, rx: 60, ry: 30 }],
+    theme: {
+      groundTop: '#10182e', groundBottom: '#070a16',
+      mottleLight: 'rgba(60,120,255,0.07)', mottleDark: 'rgba(0,0,0,0.35)',
+      pathEdge: '#3af2ff', pathFill: '#1b2440', pathLine: 'rgba(58,242,255,0.35)',
+      waterShallow: '#ff7a1a', waterDeep: '#ff2d05', waterGlow: 'rgba(255,220,120,0.6)',
+      stone: '#2b3356', stoneDark: '#1a1f36', cloudAlpha: 0.0,
+      decor: ['spire', 'skullpile', 'brazier', 'obsidian', 'chain', 'neonrune'],
+      weather: 'embers',
+      lava: true,
+      underworld: true,
+      neon: '#3af2ff',
+    },
+    waves: [
+      { entries: [{ type: 'cinderling', count: 14, interval: 0.55 }] },
+      { entries: [{ type: 'hellhound', count: 6, interval: 1.2 }, { type: 'cinderling', count: 10, interval: 0.5 }] },
+      { entries: [{ type: 'soulWisp', count: 8, interval: 0.8 }, { type: 'cinderling', count: 12, interval: 0.45 }] },
+      { entries: [{ type: 'gateGolem', count: 2, interval: 4 }, { type: 'hellhound', count: 8, interval: 0.9 }] },
+      { entries: [{ type: 'cinderling', count: 24, interval: 0.35 }, { type: 'soulWisp', count: 8, interval: 0.7 }] },
+      { entries: [{ type: 'hellhound', count: 12, interval: 0.7 }, { type: 'gateGolem', count: 3, interval: 3 }, { type: 'soulWisp', count: 6, interval: 0.7 }] },
+      { entries: [{ type: 'gateGolem', count: 4, interval: 2.5 }, { type: 'cinderling', count: 20, interval: 0.4 }] },
+      { entries: [{ type: 'soulWisp', count: 14, interval: 0.5 }, { type: 'hellhound', count: 10, interval: 0.7 }] },
+      { entries: [{ type: 'hellhound', count: 14, interval: 0.6 }, { type: 'gateGolem', count: 5, interval: 2 }, { type: 'cinderling', count: 16, interval: 0.4 }] },
+      { entries: [{ type: 'cinderling', count: 20, interval: 0.4 }, { type: 'baal', count: 1, interval: 3 }, { type: 'hellhound', count: 10, interval: 0.8 }, { type: 'gateGolem', count: 3, interval: 2.5 }] },
+    ],
+  },
+
+  {
+    ...SIZE,
+    id: 'neon',
+    part: 2,
+    name: 'Neon Sprawl',
+    subtitle: 'The lit city of the damned. Shades that dodge, succubi that hex your towers.',
+    startingGold: 3600,
+    startingLives: 20,
+    sellRefund: 0.5,
+    path: [
+      { x: -20, y: 80 }, { x: 120, y: 80 }, { x: 200, y: 180 }, { x: 120, y: 300 },
+      { x: 220, y: 410 }, { x: 400, y: 380 }, { x: 420, y: 230 }, { x: 560, y: 150 },
+      { x: 680, y: 240 }, { x: 640, y: 380 }, { x: 820, y: 400 },
+    ],
+    buildSpots: [
+      { x: 70, y: 120 }, { x: 231, y: 125 }, { x: 196, y: 252 }, { x: 346, y: 319 },
+      { x: 443, y: 295 }, { x: 482, y: 156 }, { x: 619, y: 117 }, { x: 713, y: 287 },
+      { x: 609, y: 416 }, { x: 349, y: 457 },
+    ],
+    water: [{ x: 700, y: 60, rx: 70, ry: 32 }, { x: 60, y: 420, rx: 55, ry: 35 }, { x: 330, y: 220, rx: 50, ry: 28 }],
+    theme: {
+      groundTop: '#0d1030', groundBottom: '#06061a',
+      mottleLight: 'rgba(255,45,149,0.08)', mottleDark: 'rgba(0,0,0,0.35)',
+      pathEdge: '#ff2d95', pathFill: '#1a1538', pathLine: 'rgba(255,45,149,0.35)',
+      waterShallow: '#ff2d95', waterDeep: '#7a00b5', waterGlow: 'rgba(255,180,255,0.6)',
+      stone: '#2c2a52', stoneDark: '#1b1838', cloudAlpha: 0.0,
+      decor: ['neonrune', 'neonrune', 'spire', 'brazier', 'skullpile', 'chain', 'obsidian'],
+      weather: 'embers',
+      lava: true,
+      underworld: true,
+      neon: '#ff2d95',
+    },
+    waves: [
+      { entries: [{ type: 'neonShade', count: 10, interval: 0.7 }] },
+      { entries: [{ type: 'chainFiend', count: 4, interval: 1.6 }, { type: 'neonShade', count: 10, interval: 0.55 }] },
+      { entries: [{ type: 'succubus', count: 3, interval: 2.2 }, { type: 'neonShade', count: 12, interval: 0.5 }] },
+      { entries: [{ type: 'voidSpawner', count: 1, interval: 5 }, { type: 'chainFiend', count: 6, interval: 1.2 }] },
+      { entries: [{ type: 'neonShade', count: 18, interval: 0.4 }, { type: 'succubus', count: 4, interval: 1.8 }] },
+      { entries: [{ type: 'chainFiend', count: 8, interval: 1 }, { type: 'voidSpawner', count: 2, interval: 4 }, { type: 'neonShade', count: 10, interval: 0.5 }] },
+      { entries: [{ type: 'succubus', count: 6, interval: 1.4 }, { type: 'chainFiend', count: 8, interval: 0.9 }] },
+      { entries: [{ type: 'neonShade', count: 22, interval: 0.35 }, { type: 'voidSpawner', count: 2, interval: 4 }] },
+      { entries: [{ type: 'chainFiend', count: 10, interval: 0.8 }, { type: 'succubus', count: 6, interval: 1.4 }, { type: 'neonShade', count: 12, interval: 0.45 }] },
+      { entries: [{ type: 'voidSpawner', count: 3, interval: 3.5 }, { type: 'chainFiend', count: 10, interval: 0.8 }, { type: 'neonShade', count: 14, interval: 0.4 }] },
+      { entries: [{ type: 'neonShade', count: 16, interval: 0.4 }, { type: 'nyx', count: 1, interval: 3 }, { type: 'succubus', count: 6, interval: 1.4 }, { type: 'chainFiend', count: 8, interval: 0.9 }] },
+    ],
+  },
+
+  {
+    ...SIZE,
+    id: 'pit',
+    part: 2,
+    name: 'Throne of the Pit',
+    subtitle: 'The bottom of everything. Pit lords, fallen angels, and Moloch himself.',
+    startingGold: 3800,
+    startingLives: 20,
+    sellRefund: 0.5,
+    path: [
+      { x: 400, y: -20 }, { x: 400, y: 90 }, { x: 250, y: 150 }, { x: 160, y: 280 },
+      { x: 280, y: 400 }, { x: 460, y: 360 }, { x: 560, y: 230 }, { x: 680, y: 160 },
+      { x: 720, y: 300 }, { x: 620, y: 430 }, { x: 400, y: 500 },
+    ],
+    buildSpots: [
+      { x: 328, y: 52 }, { x: 455, y: 59 }, { x: 270, y: 231 }, { x: 133, y: 233 },
+      { x: 236, y: 315 }, { x: 399, y: 311 }, { x: 538, y: 390 }, { x: 644, y: 262 },
+      { x: 733, y: 181 }, { x: 438, y: 421 }, { x: 156, y: 370 },
+    ],
+    water: [{ x: 90, y: 90, rx: 70, ry: 42 }, { x: 720, y: 60, rx: 60, ry: 32 }, { x: 360, y: 160, rx: 50, ry: 26 }, { x: 760, y: 420, rx: 55, ry: 34 }],
+    theme: {
+      groundTop: '#140a1e', groundBottom: '#050308',
+      mottleLight: 'rgba(255,80,40,0.08)', mottleDark: 'rgba(0,0,0,0.4)',
+      pathEdge: '#ff6a00', pathFill: '#2a1414', pathLine: 'rgba(255,106,0,0.4)',
+      waterShallow: '#ffb000', waterDeep: '#ff3300', waterGlow: 'rgba(255,240,160,0.65)',
+      stone: '#3a2630', stoneDark: '#22161c', cloudAlpha: 0.0,
+      decor: ['brazier', 'brazier', 'spire', 'chain', 'skullpile', 'neonrune', 'obsidian', 'vent'],
+      weather: 'embers',
+      lava: true,
+      underworld: true,
+      neon: '#ff6a00',
+    },
+    waves: [
+      { entries: [{ type: 'doomCultist', count: 8, interval: 0.9 }, { type: 'magmaSerpent', count: 3, interval: 1.6 }] },
+      { entries: [{ type: 'fallenAngel', count: 5, interval: 1.2 }, { type: 'doomCultist', count: 8, interval: 0.8 }] },
+      { entries: [{ type: 'pitLord', count: 2, interval: 4 }, { type: 'magmaSerpent', count: 6, interval: 1.1 }] },
+      { entries: [{ type: 'magmaSerpent', count: 10, interval: 0.8 }, { type: 'fallenAngel', count: 6, interval: 1.1 }] },
+      { entries: [{ type: 'doomCultist', count: 14, interval: 0.6 }, { type: 'pitLord', count: 3, interval: 3 }] },
+      { entries: [{ type: 'fallenAngel', count: 10, interval: 0.8 }, { type: 'magmaSerpent', count: 8, interval: 0.9 }, { type: 'doomCultist', count: 8, interval: 0.7 }] },
+      { entries: [{ type: 'pitLord', count: 4, interval: 2.6 }, { type: 'magmaSerpent', count: 10, interval: 0.8 }] },
+      { entries: [{ type: 'doomCultist', count: 18, interval: 0.5 }, { type: 'fallenAngel', count: 8, interval: 0.9 }] },
+      { entries: [{ type: 'magmaSerpent', count: 14, interval: 0.6 }, { type: 'pitLord', count: 4, interval: 2.4 }, { type: 'fallenAngel', count: 8, interval: 0.9 }] },
+      { entries: [{ type: 'pitLord', count: 5, interval: 2.2 }, { type: 'doomCultist', count: 16, interval: 0.5 }, { type: 'magmaSerpent', count: 10, interval: 0.7 }] },
+      { entries: [{ type: 'fallenAngel', count: 12, interval: 0.7 }, { type: 'magmaSerpent', count: 14, interval: 0.6 }, { type: 'pitLord', count: 5, interval: 2.2 }] },
+      { entries: [{ type: 'doomCultist', count: 16, interval: 0.5 }, { type: 'moloch', count: 1, interval: 3 }, { type: 'pitLord', count: 5, interval: 2.4 }, { type: 'fallenAngel', count: 10, interval: 0.8 }, { type: 'magmaSerpent', count: 10, interval: 0.7 }] },
+    ],
+  },
+];
+
 const LEVEL_1 = LEVELS[0];
 
 // The campaign's story: a prologue, a briefing before every level, a taunt
@@ -937,15 +1218,62 @@ const STORY = {
       taunt: 'Vexarion: "I burned this kingdom once, when your grandsires were children. I remember the taste."',
       victory: [
         { speaker: '{hero}', text: 'It is done. The dragon is ash and the mountain sleeps.' },
+        { speaker: 'Scout Wren', text: 'Warden... the caldera floor has split open. There are stairs going down. Lit stairs.' },
+      ],
+    },
+    dis: {
+      title: 'Part II, Chapter VI — Gates of Dis',
+      lines: [
+        { speaker: 'King Osric', text: 'Vexarion was never the master. Below the mountain lies the Underworld, and something there armed him. Our scouts found a gate of black iron, and it was open.' },
+        { speaker: 'Scout Wren', text: 'The road down glows, Warden. Rivers of fire, and lights in colours that have no names. The dead walk it, and worse than the dead.' },
+        { speaker: 'Royal Artificer Tamsin', text: 'I have something for you. A well that bends the ground itself. Nothing walks quickly through it. Take it; you will need every step they lose.' },
+        { speaker: '{hero}', text: 'Then we go down. Hold the gate behind me.' },
+      ],
+      taunt: 'Baal: "Turn back, little light. The gate opens only one way."',
+      victory: [
+        { speaker: 'Scout Wren', text: 'The Warden of the Gate is broken. Beyond it the tunnels open into a city, Warden. A city, lit like a festival, and every lamp a soul.' },
+        { speaker: 'Royal Artificer Tamsin', text: 'The gate golems were full of black powder. I can make rockets from it. Give me a day.' },
+      ],
+    },
+    neon: {
+      title: 'Part II, Chapter VII — Neon Sprawl',
+      lines: [
+        { speaker: 'Royal Artificer Tamsin', text: 'Rockets, Warden. They fly true, they fly high, and they burst. Nothing in the sky is safe from them now.' },
+        { speaker: 'Hermit Oda', text: 'The city is ruled by Nyx, the Neon Queen. Her shades slip through arrows like smoke, and her succubi can silence a tower with a word. Kill the singers first.' },
+        { speaker: '{hero}', text: 'Let her sing. I have heard worse in the swamp.' },
+      ],
+      taunt: 'Nyx: "Welcome to my city, Warden. Stay. Everyone stays."',
+      victory: [
+        { speaker: 'Hermit Oda', text: 'The queen is dark and the lamps are going out one by one. There is a stair below the throne, and heat coming up it like a furnace.' },
+        { speaker: 'King Osric', text: 'Then that is where it sits. The thing that woke the dragon, that bought the witches, that opened the gate. Finish it, Warden.' },
+      ],
+    },
+    pit: {
+      title: 'Part II, Chapter VIII — Throne of the Pit',
+      lines: [
+        { speaker: 'King Osric', text: 'Moloch, Lord of the Pit. Every war we have fought was his hand on a different puppet. He sits on a throne of everything he has ever burned.' },
+        { speaker: 'Hermit Oda', text: 'He is warded in fire and he heals like the tide. His angels fell with him and mend him still. His cultists will hex your towers. Frost, Warden. Frost and patience.' },
+        { speaker: '{hero}', text: 'I did not come this far to be patient. But I will bring the frost.' },
+      ],
+      taunt: 'Moloch: "You climbed down into my mouth, Warden. I need only close it."',
+      victory: [
+        { speaker: '{hero}', text: 'Moloch is unmade. The fire is going out below us.' },
       ],
     },
   },
-  epilogue: {
-    title: 'The Marches Hold',
+  interlude: {
+    title: 'Part I complete',
     lines: [
-      { speaker: 'King Osric', text: 'The beacons burn white again from Greenfields to the caldera. The tribes have scattered, the witches have gone back to their pools, and the caravans sing on the desert road.' },
-      { speaker: 'King Osric', text: 'Aldermere stands because you held the road, Warden, and because {hero} never once stepped back from it.' },
-      { speaker: 'Scout Wren', text: 'Though... the scouts say the fire under the mountain was never put out. Only banked. Rest while you can.' },
+      { speaker: 'King Osric', text: 'The dragon is dead and the realm breathes. But the stairs under the caldera go down, and they are lit. The war is not over, Warden. It has only found its true shape.' },
+      { speaker: 'King Osric', text: 'Part II opens on the level screen. New engines of war await you below.' },
+    ],
+  },
+  epilogue: {
+    title: 'The Pit Goes Dark',
+    lines: [
+      { speaker: 'King Osric', text: 'The fire under the world is out. The gate of black iron is sealed with the stone of three mountains, and the beacons burn white from Greenfields to the caldera.' },
+      { speaker: 'King Osric', text: 'Aldermere stands because you held the road, Warden, and because {hero} walked into hell and did not step back.' },
+      { speaker: 'Scout Wren', text: 'Go home. Sleep. If the lamps of Dis ever light again, you will be the first I wake.' },
     ],
   },
 };
@@ -1115,6 +1443,8 @@ function describeTraits(type) {
   if (type.split) out.push('Splits');
   if (type.explode) out.push('Explodes');
   if (type.blink) out.push('Blinks');
+  if (type.curse) out.push('Hexes towers');
+  if (type.spawner) out.push('Spawns brood');
   if (type.summons) out.push('Summons');
   if (type.enrage) out.push('Enrages');
   return out;
@@ -1142,6 +1472,8 @@ function waveWarnings(types) {
   add((t) => t.explode, 'Explodes', 'keep your hero clear');
   add((t) => t.blink, 'Blinks', 'leaps forward along the road');
   add((t) => t.charge, 'Charges', 'runs when wounded');
+  add((t) => t.curse, 'Hexes towers', 'silences the nearest tower for a moment');
+  add((t) => t.spawner, 'Spawns brood', 'keeps birthing more while it lives');
   return out;
 }
 
@@ -1352,6 +1684,10 @@ class Game {
       dodge: type.dodge || 0,
       charged: false,
       blinkTimer: type.blink ? type.blink.cooldown : 0,
+      curseTimer: type.curse ? type.curse.every * 0.6 : 0,
+      spawnTimer: type.spawner ? type.spawner.every : 0,
+      gravity: 0, // seconds left of a gravity well's drag
+      gravityFactor: 1,
     };
     this.enemies.push(enemy);
     const pos = this.path.positionAt(dist);
@@ -1435,8 +1771,41 @@ class Game {
           this.pushEvent({ type: 'blink', x: from.x, y: from.y, toX: to.x, toY: to.y, enemyType: enemy.typeId });
         }
       }
+      // Curses hex the nearest tower; spawners birth more enemies.
+      if (type.curse && this.towers.some(Boolean)) {
+        enemy.curseTimer -= dt;
+        if (enemy.curseTimer <= 0) {
+          enemy.curseTimer = type.curse.every;
+          const pos = this.path.positionAt(enemy.dist);
+          let best = -1;
+          let bestD = 170;
+          this.towers.forEach((tower, i) => {
+            if (!tower) return;
+            const spot = this.level.buildSpots[i];
+            const d = Math.hypot(spot.x - pos.x, spot.y - pos.y);
+            if (d < bestD) { bestD = d; best = i; }
+          });
+          if (best >= 0) {
+            this.towers[best].cursed = type.curse.duration;
+            this.towers[best].beamTargetId = null;
+            const spot = this.level.buildSpots[best];
+            this.pushEvent({ type: 'tower-cursed', x: spot.x, y: spot.y, fromX: pos.x, fromY: pos.y, duration: type.curse.duration, enemyType: enemy.typeId });
+          }
+        }
+      }
+      if (type.spawner) {
+        enemy.spawnTimer -= dt;
+        if (enemy.spawnTimer <= 0) {
+          enemy.spawnTimer = type.spawner.every;
+          for (let i = 0; i < type.spawner.count; i++) this.spawnEnemy(type.spawner.type, Math.max(0, enemy.dist - 10 - i * 10));
+          const pos = this.path.positionAt(enemy.dist);
+          this.pushEvent({ type: 'spawned-brood', x: pos.x, y: pos.y, enemyType: enemy.typeId, count: type.spawner.count });
+        }
+      }
+      if (enemy.gravity > 0) enemy.gravity -= dt;
       if (enemy.blocked) continue; // held in melee by the hero
-      enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * dt;
+      const drag = enemy.gravity > 0 ? enemy.gravityFactor : 1;
+      enemy.dist += enemy.speed * (enemy.slow ? enemy.slow.factor : 1) * drag * dt;
       if (enemy.dist >= this.path.totalLength) {
         enemy.alive = false;
         enemy.leaked = true;
@@ -1477,7 +1846,16 @@ class Game {
       tower.age = (tower.age || 0) + dt; // seconds since built/upgraded, for the renderer
       const boost = tower.boost || 1;
 
+      if (tower.cursed > 0) {
+        tower.cursed -= dt; // hexed: fires nothing
+        tower.beamTargetId = null;
+        continue;
+      }
       if (attack === 'aura') continue;
+      if (attack === 'field') {
+        this.updateField(tower, type, stats, spot, dt, boost);
+        continue;
+      }
       if (attack === 'beam') {
         this.updateBeam(tower, type, stats, spot, dt, boost);
         continue;
@@ -1487,12 +1865,19 @@ class Game {
       if (tower.cooldown > 0) continue;
       const target = this.findTarget(spot, stats.range, { minRange: stats.minRange, mode: type.targeting, ground: type.targets === 'ground' });
       if (!target) continue;
+      // Salvo weapons fire several shots a tenth of a second apart.
+      if (stats.salvo > 1 && !tower.salvoLeft) tower.salvoLeft = stats.salvo;
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);
       tower.targetX = pos.x; // where the shot went, for continuous effects like the flame jet
       tower.targetY = pos.y;
-      tower.cooldown = stats.fireInterval;
+      if (tower.salvoLeft) {
+        tower.salvoLeft -= 1;
+        tower.cooldown = tower.salvoLeft > 0 ? 0.1 : stats.fireInterval;
+      } else {
+        tower.cooldown = stats.fireInterval;
+      }
       this.pushEvent({ type: 'shot', x: spot.x, y: spot.y, angle: tower.angle, towerType: tower.typeId, level: tower.level, targetX: pos.x, targetY: pos.y });
 
       if (attack === 'projectile') {
@@ -1557,6 +1942,22 @@ class Game {
       current = next;
     }
     this.pushEvent({ type: 'zap', points, towerType: tower.typeId, level: tower.level });
+  }
+
+  // A gravity well drags every enemy in its field and, at full power,
+  // crushes them with a steady pulse of true damage.
+  updateField(tower, type, stats, spot, dt, boost = 1) {
+    let caught = 0;
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const pos = this.path.positionAt(enemy.dist);
+      if (Math.hypot(pos.x - spot.x, pos.y - spot.y) > stats.range + enemy.radius) continue;
+      caught += 1;
+      enemy.gravityFactor = enemy.gravity > 0 ? Math.min(enemy.gravityFactor, stats.slow) : stats.slow;
+      enemy.gravity = 0.2;
+      if (stats.pulse) this.damageEnemy(enemy, stats.pulse * boost * dt, 'true', { flash: false });
+    }
+    tower.fieldActive = caught > 0;
   }
 
   // A beam stays on its target while it can and ramps up the longer it holds.
@@ -2079,6 +2480,8 @@ class Effects {
         case 'boss-enraged': this.spawnEnrage(event); break;
         case 'shatter': this.spawnShatter(event); break;
         case 'dodge': this.addText(event.x, event.y - 14, 'Miss', '#ffffff', 0.8); break;
+        case 'tower-cursed': this.spawnCurse(event); break;
+        case 'spawned-brood': this.spawnBrood(event); break;
         case 'charge': this.spawnCharge(event); break;
         case 'blink': this.spawnBlink(event); break;
         case 'split': this.spawnSplit(event); break;
@@ -2225,6 +2628,16 @@ class Effects {
       if (tower.typeId === 'venom' && Math.random() < dt * 3) {
         this.addParticle({ x: spot.x + rand(-8, 8), y: spot.y - 6, vx: rand(-3, 3), vy: rand(-22, -12), life: rand(0.8, 1.4), size: rand(1.2, 2.2), color: 'rgba(198,255,107,0.8)', shape: 'bubble', wobble: 10 });
       }
+      if (tower.typeId === 'gravity' && Math.random() < dt * 14) {
+        // Motes spiralling into the well.
+        const stats = game.towerStats(tower);
+        const a = rand(0, Math.PI * 2);
+        const d = stats.range * rand(0.5, 1);
+        this.addParticle({ x: spot.x + Math.cos(a) * d, y: spot.y + Math.sin(a) * d * 0.6, vx: -Math.cos(a) * d * 1.2, vy: -Math.sin(a) * d * 0.7 - 10, life: 0.8, size: rand(1, 2), color: pick(['#7a5cff', '#c9bfff', '#3af2ff']), shape: 'star', spin: 6, drag: 0.5 });
+      }
+      if (tower.typeId === 'missile' && tower.cooldown > 1 && Math.random() < dt * 4) {
+        this.addParticle({ x: spot.x + rand(-6, 6), y: spot.y - 18, vx: rand(-3, 3), vy: rand(-12, -6), life: 0.9, size: rand(2, 3), color: 'rgba(180,180,190,0.4)', shape: 'smoke', grow: 1.5 });
+      }
       if (tower.typeId === 'tesla' && Math.random() < dt * 6) {
         const a = rand(0, Math.PI * 2);
         const sy = spot.y - 35 - tower.level * 5;
@@ -2254,6 +2667,9 @@ class Effects {
         this.addParticle({ x: proj.x, y: proj.y - 10, vx: rand(-6, 6), vy: rand(-14, -4), life: rand(0.25, 0.5), size: rand(1.5, 3), color: '#8d949b', shape: 'smoke' });
       } else if (t === 'mortar' && Math.random() < dt * 60) {
         this.addParticle({ x: proj.x, y: proj.y - 14, vx: rand(-10, 10), vy: rand(-10, 10), life: rand(0.2, 0.4), size: rand(1.5, 3), color: pick(['#ffb347', '#ff6b35', '#9aa0a6']), shape: Math.random() < 0.6 ? 'ember' : 'smoke' });
+      } else if (t === 'missile' && Math.random() < dt * 70) {
+        this.addParticle({ x: proj.x - proj.dirX * 6, y: proj.y - proj.dirY * 6, vx: -proj.dirX * 20 + rand(-8, 8), vy: -proj.dirY * 20 + rand(-8, 8), life: rand(0.3, 0.6), size: rand(2, 3.5), color: pick(['rgba(200,200,210,0.6)', 'rgba(150,150,160,0.5)']), shape: 'smoke', grow: 1.8 });
+        this.addParticle({ x: proj.x - proj.dirX * 5, y: proj.y - proj.dirY * 5, vx: -proj.dirX * 40, vy: -proj.dirY * 40, life: 0.12, size: 3, color: '#ffb347', shape: 'fire', drag: 3 });
       } else if (t === 'venom' && Math.random() < dt * 20) {
         this.addParticle({ x: proj.x, y: proj.y, vx: rand(-3, 3), vy: 10, life: 0.4, size: 1.6, color: '#8fd33a', shape: 'drop', gravity: 160 });
       } else if (t === 'archer' && Math.random() < dt * 20) {
@@ -2611,6 +3027,23 @@ class Effects {
   }
 
   // --- Enemy abilities -------------------------------------------------------------
+
+  spawnCurse(event) {
+    this.addText(event.x, event.y - 36, 'Hexed!', '#c13fd6', 1.1);
+    this.addParticle({ x: event.fromX, y: event.fromY - 10, x2: event.x, y2: event.y - 16, vx: 0, vy: 0, life: 0.3, size: 3, color: 'rgba(193,63,214,0.9)', shape: 'tracer' });
+    this.addParticle({ x: event.x, y: event.y - 12, vx: 0, vy: 0, life: 0.5, size: 28, color: 'rgba(193,63,214,0.9)', shape: 'ring' });
+    for (let i = 0; i < 14; i++) {
+      const a = rand(0, Math.PI * 2);
+      this.addParticle({ x: event.x, y: event.y - 12, vx: Math.cos(a) * rand(20, 60), vy: Math.sin(a) * rand(20, 60) - 20, life: rand(0.5, 0.9), size: rand(1.5, 3), color: pick(['#c13fd6', '#ff2d95', '#7a5cff']), shape: 'star', spin: rand(-6, 6), drag: 1.5 });
+    }
+  }
+
+  spawnBrood(event) {
+    this.addParticle({ x: event.x, y: event.y, vx: 0, vy: 0, life: 0.4, size: 26, color: 'rgba(122,92,255,0.8)', shape: 'ring' });
+    for (let i = 0; i < 10; i++) {
+      this.addParticle({ x: event.x + rand(-10, 10), y: event.y + rand(-6, 6), vx: rand(-30, 30), vy: rand(-40, -10), life: rand(0.4, 0.7), size: rand(2, 4), color: pick(['#3b1f6b', '#7a5cff', '#ff7a2a']), shape: 'smoke', grow: 1.5 });
+    }
+  }
 
   spawnCharge(event) {
     this.addText(event.x, event.y - 16, 'Charge!', '#ff7a45', 0.9);
@@ -2995,6 +3428,7 @@ function render(ctx, game, effects, ui, time) {
   drawParticleList(ctx, effects.groundParticles);
   drawBuildSpots(ctx, game, ui, time);
   drawDecorations(ctx, scene.decor, level.theme, time);
+  drawGravityFields(ctx, game, time);
   drawTowers(ctx, game, ui, time);
   drawEnemies(ctx, game, time);
   drawHero(ctx, game, ui, time);
@@ -3005,6 +3439,7 @@ function render(ctx, game, effects, ui, time) {
   drawCloudShadows(ctx, scene.clouds, level, time);
   drawBeaconAuras(ctx, game, time);
   drawParticleList(ctx, effects.particles, true);
+  if (level.theme.underworld) drawUnderworldLights(ctx, game, scene, time);
   ctx.restore();
   drawVignette(ctx, scene.vignette, level);
   if (effects.flash) {
@@ -3064,6 +3499,17 @@ function getScene(game, dpr) {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   tracePath(ctx, game.path.waypoints);
+  if (theme.underworld) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = hexToRgba(theme.neon, 0.22);
+    ctx.lineWidth = 46;
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba(theme.neon, 0.3);
+    ctx.lineWidth = 36;
+    ctx.stroke();
+    ctx.restore();
+  }
   ctx.strokeStyle = theme.pathEdge;
   ctx.lineWidth = 34;
   ctx.stroke();
@@ -3109,7 +3555,7 @@ function makeVignette(level, dpr) {
   ctx.scale(dpr, dpr);
   const g = ctx.createRadialGradient(level.width / 2, level.height / 2, level.height * 0.45, level.width / 2, level.height / 2, level.width * 0.72);
   g.addColorStop(0, 'rgba(0,0,0,0)');
-  g.addColorStop(1, 'rgba(10,8,20,0.42)');
+  g.addColorStop(1, level.theme.underworld ? 'rgba(2,2,12,0.7)' : 'rgba(10,8,20,0.42)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, level.width, level.height);
   return canvas;
@@ -3362,6 +3808,8 @@ function drawGroundTexture(ctx, level, rng) {
       ctx.quadraticCurveTo(x + 10, y + 3, x + 24 + rng() * 16, y);
       ctx.stroke();
     }
+  } else if (theme.underworld) {
+    drawUnderworldGround(ctx, level, theme, rng);
   } else if (theme.lava) {
     // Ash speckle and faint cooling-crust cracks.
     for (let i = 0; i < 2000; i++) {
@@ -3517,6 +3965,8 @@ function drawThemeGroundFeatures(ctx, game, rng) {
       const spot = findClearSpot(game, rng, 12, 4);
       if (spot) drawMossPatch(ctx, spot.x, spot.y, 14 + rng() * 18, rng);
     }
+  } else if (theme.underworld) {
+    // Cracks and runes come from the ground texture pass.
   } else if (theme.lava) {
     for (let i = 0; i < 9; i++) {
       const spot = findClearSpot(game, rng, 14);
@@ -3560,6 +4010,8 @@ function drawThemeSetPieces(ctx, game, rng) {
     place(4, 12, (x, y) => drawLog(ctx, x, y, rng, '#3f3024', false, true));
     place(3, 10, (x, y) => drawMushroomRing(ctx, x, y, rng));
     place(1, 30, (x, y) => drawStiltHut(ctx, x, y));
+  } else if (theme.underworld) {
+    drawUnderworldSetPieces(ctx, game, rng);
   } else if (theme.lava) {
     place(5, 14, (x, y) => drawBasaltColumns(ctx, x, y, rng));
     place(3, 16, (x, y) => drawFissure(ctx, x, y, rng));
@@ -4232,6 +4684,11 @@ function drawDecorations(ctx, decor, theme, time) {
       case 'iceshard': drawIceShard(ctx, d.x, d.y, time); break;
       case 'bones': drawBones(ctx, d.x, d.y); break;
       case 'vent': drawVent(ctx, d.x, d.y, time, d.seed); break;
+      case 'spire': drawBoneSpire(ctx, d.x, d.y, 0.8); break;
+      case 'skullpile': drawSkullPile(ctx, d.x, d.y, d.seed); break;
+      case 'brazier': drawBrazier(ctx, d.x, d.y, time, d.seed); break;
+      case 'chain': drawChains(ctx, d.x, d.y, mulberry32(Math.floor(d.seed * 997))); break;
+      case 'neonrune': drawNeonRune(ctx, d.x, d.y, time, d.seed, theme.neon || '#3af2ff'); break;
     }
     ctx.restore();
   }
@@ -4556,7 +5013,10 @@ function drawTowers(ctx, game, ui, time) {
     else if (tower.typeId === 'sniper') drawSniperTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
     else if (tower.typeId === 'venom') drawVenomTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
     else if (tower.typeId === 'beacon') drawBeaconTower(ctx, spot, time, tower.level);
+    else if (tower.typeId === 'gravity') drawGravityTower(ctx, spot, time, !!tower.fieldActive, tower.level);
+    else if (tower.typeId === 'missile') drawMissileTower(ctx, spot, time, tower.angle ?? -Math.PI / 2, tower.cooldown / stats.fireInterval, tower.level);
     ctx.restore();
+    if (tower.cursed > 0) drawCurse(ctx, spot, tower.cursed, time);
 
     // Level pips.
     ctx.fillStyle = '#ffd700';
@@ -7485,6 +7945,481 @@ function drawHeroPaladin(ctx, time, swing, stride) {
   ctx.restore();
 }
 
+// --- Part 2 towers -------------------------------------------------------------------
+
+// Gravity Well: a floating black orb inside rotating rings, over a pedestal
+// of cracked stone that bends the ground into a dark lens.
+function drawGravityTower(ctx, spot, time, active, level) {
+  const x = spot.x;
+  const y = spot.y - 14;
+  const r = 7 + level * 1.2;
+  // Cracked stone pedestal.
+  ctx.fillStyle = domeGradient(ctx, spot.x, spot.y, 13, '#5a5273', '#2b2740', '#15121f');
+  ctx.strokeStyle = '#0d0b12';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.ellipse(spot.x, spot.y + 1, 13 + level, 5.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(122,92,255,0.7)';
+  ctx.lineWidth = 1;
+  for (let k = 0; k < 4; k++) {
+    const a = k * 1.6 + 0.4;
+    ctx.beginPath();
+    ctx.moveTo(spot.x + Math.cos(a) * 4, spot.y + 1 + Math.sin(a) * 2);
+    ctx.lineTo(spot.x + Math.cos(a) * (12 + level), spot.y + 1 + Math.sin(a) * 5);
+    ctx.stroke();
+  }
+  // Lens of bent light under the orb.
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x, y + 8, 18 + level * 2, `rgba(122,92,255,${active ? 0.35 : 0.2})`);
+  // Rings.
+  const tilt = 0.35;
+  for (let k = 0; k < 2 + Math.min(level, 2); k++) {
+    const a = time * (1.2 + k * 0.5) * (k % 2 ? -1 : 1) + k;
+    ctx.strokeStyle = `rgba(${k % 2 ? '58,242,255' : '201,191,255'},${0.55 + (active ? 0.3 : 0)})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r + 5 + k * 3, (r + 5 + k * 3) * tilt, a, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  // The orb: black heart, violet event horizon.
+  const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.3);
+  g.addColorStop(0, '#000000');
+  g.addColorStop(0.6, '#1a0f3a');
+  g.addColorStop(0.85, '#7a5cff');
+  g.addColorStop(1, 'rgba(122,92,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(201,191,255,${0.6 + Math.sin(time * 6) * 0.2})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  // Captured sparks orbiting fast.
+  ctx.fillStyle = '#ffffff';
+  for (let k = 0; k < 3 + level; k++) {
+    const a = time * 5 + (k / (3 + level)) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2) * 0.5, 1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// The well's field on the ground: a dark lens with inward-flowing dashes.
+function drawGravityFields(ctx, game, time) {
+  game.towers.forEach((tower, i) => {
+    if (!tower || tower.typeId !== 'gravity') return;
+    const spot = game.level.buildSpots[i];
+    const stats = game.towerStats(tower);
+    const rr = stats.range;
+    ctx.save();
+    const g = ctx.createRadialGradient(spot.x, spot.y, 0, spot.x, spot.y, rr);
+    g.addColorStop(0, 'rgba(20,10,50,0.35)');
+    g.addColorStop(0.7, 'rgba(60,30,120,0.18)');
+    g.addColorStop(1, 'rgba(122,92,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(spot.x, spot.y, rr, rr * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 3; k++) {
+      const t = ((time * 0.5 + k / 3) % 1);
+      ctx.strokeStyle = `rgba(122,92,255,${0.4 * t})`;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([6, 10]);
+      ctx.lineDashOffset = time * 20;
+      ctx.beginPath();
+      ctx.ellipse(spot.x, spot.y, rr * (1 - t), rr * 0.6 * (1 - t), 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  });
+}
+
+// Missile Battery: an armoured launcher on a turntable, a rack of rockets,
+// a radar dish that sweeps, and exhaust scorch on the plate.
+function drawMissileTower(ctx, spot, time, angle, cooldownFrac, level) {
+  const x = spot.x;
+  const y = spot.y - 8;
+  // Plate with scorch.
+  ctx.fillStyle = domeGradient(ctx, x, y + 6, 15, '#6d747b', '#3a3f45', '#1b1f24');
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.ellipse(x, y + 7, 15 + level, 6.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x - 4, y + 8, 6, 2.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ff3f8e';
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + time * 0.3;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * (13 + level), y + 7 + Math.sin(a) * 5.5, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Turntable and launcher box, rotated toward the target.
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  const recoil = Math.max(0, (cooldownFrac - 0.85) / 0.15) * 2;
+  ctx.translate(-recoil, 0);
+  const w = 20 + level * 2;
+  const h = 12 + level;
+  ctx.fillStyle = cylinderGradient(ctx, 0, 0, '#2a2f36', '#6d747b', '#4a5057');
+  const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+  g.addColorStop(0, '#7a8188');
+  g.addColorStop(0.5, '#4a5057');
+  g.addColorStop(1, '#23272b');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, -w / 2, -h / 2, w, h, 3);
+  // Tube mouths: the rack, some loaded, some spent after firing.
+  const tubes = 2 + Math.min(level, 2);
+  for (let k = 0; k < tubes; k++) {
+    const ty = -h / 2 + 2.5 + (k * (h - 5)) / Math.max(1, tubes - 1);
+    const loaded = cooldownFrac < 0.6 || k % 2 === 0;
+    ctx.fillStyle = loaded ? '#ff3f8e' : '#15181b';
+    ctx.strokeStyle = '#0f1113';
+    ctx.beginPath();
+    ctx.arc(w / 2 - 1, ty, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    if (loaded) {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(w / 2 - 1.6, ty - 0.6, 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  // Magenta stripe and warning chevrons.
+  ctx.fillStyle = '#ff3f8e';
+  ctx.fillRect(-w / 2 + 2, -1, w - 8, 2);
+  ctx.fillStyle = '#ffd98a';
+  for (let k = 0; k < 3; k++) ctx.fillRect(-w / 2 + 3 + k * 4, h / 2 - 3, 2, 1.5);
+  ctx.restore();
+  // Radar dish sweeping on a mast.
+  ctx.strokeStyle = '#3a3f45';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x - 10 - level, y + 2);
+  ctx.lineTo(x - 10 - level, y - 12);
+  ctx.stroke();
+  ctx.save();
+  ctx.translate(x - 10 - level, y - 13);
+  ctx.rotate(time * 2);
+  ctx.fillStyle = '#c9ced4';
+  ctx.strokeStyle = '#0f1113';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, 4.5, Math.PI * 0.6, Math.PI * 1.4);
+  ctx.lineTo(0, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x - 10 - level, y - 13, 5, `rgba(255,63,142,${0.4 + Math.sin(time * 4) * 0.2})`);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// Hexed tower overlay: a purple sigil ring with floating runes.
+function drawCurse(ctx, spot, cursed, time) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const a = Math.min(1, cursed * 2);
+  glowDisc(ctx, spot.x, spot.y - 12, 26, `rgba(193,63,214,${0.3 * a})`);
+  ctx.strokeStyle = `rgba(255,120,255,${0.8 * a})`;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([3, 3]);
+  ctx.lineDashOffset = -time * 25;
+  ctx.beginPath();
+  ctx.ellipse(spot.x, spot.y + 2, 20, 8, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = `rgba(255,150,255,${a})`;
+  ctx.font = 'bold 9px serif';
+  ctx.textAlign = 'center';
+  for (let k = 0; k < 3; k++) {
+    const ang = time * 2 + (k / 3) * Math.PI * 2;
+    ctx.fillText(['ᚦ', 'ᛉ', 'ᚷ'][k], spot.x + Math.cos(ang) * 16, spot.y - 20 + Math.sin(ang) * 6);
+  }
+  ctx.restore();
+}
+
+// --- Underworld theme ----------------------------------------------------------------
+
+// Ground: ash with glowing cracks and faint neon circuitry.
+function drawUnderworldGround(ctx, level, theme, rng) {
+  const w = level.width;
+  const h = level.height;
+  for (let i = 0; i < 2400; i++) {
+    ctx.globalAlpha = 0.2 + rng() * 0.4;
+    ctx.fillStyle = rng() > 0.8 ? '#4a4a6a' : '#0a0c18';
+    ctx.fillRect(rng() * w, rng() * h, 1.4, 1.4);
+  }
+  ctx.globalAlpha = 1;
+  // Glowing cracks.
+  const [cr, cg, cb] = hexToRgb(theme.neon);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 26; i++) {
+    let x = rng() * w;
+    let y = rng() * h;
+    const pts = [[x, y]];
+    for (let k = 0; k < 5; k++) {
+      x += (rng() - 0.5) * 40;
+      y += (rng() - 0.5) * 40;
+      pts.push([x, y]);
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.18)`;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    pts.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+    ctx.stroke();
+    ctx.strokeStyle = i % 3 ? `rgba(${cr},${cg},${cb},0.8)` : 'rgba(255,120,40,0.8)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // Faint circuitry lines.
+  ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.08)`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 40; i++) {
+    const x = rng() * w;
+    const y = rng() * h;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + (rng() > 0.5 ? 40 : 0), y);
+    ctx.lineTo(x + (rng() > 0.5 ? 40 : 0), y + 30);
+    ctx.stroke();
+  }
+}
+
+// Set pieces: bone spires, braziers, chains, neon rune circles, skull piles.
+function drawUnderworldSetPieces(ctx, game, rng) {
+  const { level } = game;
+  for (let i = 0; i < 3; i++) {
+    const p = findClearSpot(game, rng, 40, 20);
+    if (p) drawRuneCircle(ctx, p.x, p.y, 26 + rng() * 14, level.theme.neon, rng);
+  }
+  for (let i = 0; i < 2; i++) {
+    const p = findClearSpot(game, rng, 36, 20);
+    if (p) drawBoneSpire(ctx, p.x, p.y, 1.4 + rng() * 0.6);
+  }
+  const p = findClearSpot(game, rng, 44, 20);
+  if (p) drawChains(ctx, p.x, p.y, rng);
+}
+
+function drawRuneCircle(ctx, x, y, r, neon, rng) {
+  const [cr, cg, cb] = hexToRgb(neon);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(${cr},${cg},${cb},0.55)`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.45, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * 0.7, r * 0.32, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 1;
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + rng() * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.32);
+    ctx.lineTo(x + Math.cos(a + 2.1) * r * 0.7, y + Math.sin(a + 2.1) * r * 0.32);
+    ctx.stroke();
+  }
+  ctx.fillStyle = `rgba(${cr},${cg},${cb},0.9)`;
+  ctx.font = '9px serif';
+  ctx.textAlign = 'center';
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    ctx.fillText(['ᚠ', 'ᚢ', 'ᚦ', 'ᚨ', 'ᚱ', 'ᚲ', 'ᚷ', 'ᚹ'][k], x + Math.cos(a) * r * 0.86, y + Math.sin(a) * r * 0.39 + 3);
+  }
+  glowDisc(ctx, x, y, r * 1.2, `rgba(${cr},${cg},${cb},0.12)`);
+  ctx.restore();
+}
+
+function drawBoneSpire(ctx, x, y, scale) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(0, 2, 14, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  const g = ctx.createLinearGradient(-8, 0, 8, 0);
+  g.addColorStop(0, '#6b6354');
+  g.addColorStop(0.5, '#d9d0b8');
+  g.addColorStop(1, '#4a4438');
+  ctx.fillStyle = g;
+  ctx.strokeStyle = '#2b2620';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-9, 2);
+  ctx.quadraticCurveTo(-5, -20, 1, -44);
+  ctx.quadraticCurveTo(5, -22, 9, 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Rib hooks.
+  ctx.fillStyle = '#d9d0b8';
+  for (let k = 0; k < 4; k++) {
+    const yy = -8 - k * 8;
+    const side = k % 2 ? 1 : -1;
+    ctx.beginPath();
+    ctx.moveTo(side * 4, yy);
+    ctx.quadraticCurveTo(side * 12, yy - 2, side * 10, yy - 9);
+    ctx.quadraticCurveTo(side * 9, yy - 3, side * 3, yy - 3);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Skull at the base.
+  ctx.fillStyle = '#e9e2d0';
+  ctx.beginPath();
+  ctx.arc(-11, -2, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1b1f24';
+  ctx.beginPath();
+  ctx.arc(-12.3, -2.6, 1, 0, Math.PI * 2);
+  ctx.arc(-9.7, -2.6, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawChains(ctx, x, y, rng) {
+  ctx.save();
+  ctx.strokeStyle = '#5c6268';
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  for (let c = 0; c < 2; c++) {
+    const x0 = x - 40 + c * 10;
+    const y0 = y - 10 + c * 14;
+    const x1 = x + 44 - c * 6;
+    const y1 = y + 4 + c * 10;
+    const steps = 10;
+    for (let k = 0; k < steps; k++) {
+      const t0 = k / steps;
+      const t1 = (k + 1) / steps;
+      const sag = (t) => Math.sin(t * Math.PI) * 12;
+      ctx.beginPath();
+      ctx.ellipse(x0 + (x1 - x0) * (t0 + t1) / 2, y0 + (y1 - y0) * (t0 + t1) / 2 + sag((t0 + t1) / 2), 4, 2.2, Math.atan2(y1 - y0, x1 - x0), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Anchor rings.
+    ctx.fillStyle = '#3a3f45';
+    ctx.beginPath();
+    ctx.arc(x0, y0, 3.5, 0, Math.PI * 2);
+    ctx.arc(x1, y1, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawSkullPile(ctx, x, y, seed) {
+  const rng = mulberry32(Math.floor(seed * 1000));
+  for (let k = 0; k < 6; k++) {
+    const sx = x + (rng() - 0.5) * 18;
+    const sy = y - rng() * 8;
+    const r = 3 + rng() * 2;
+    ctx.fillStyle = k % 3 ? '#d9d0b8' : '#b8ae95';
+    ctx.strokeStyle = '#4a4438';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#1b1f24';
+    ctx.beginPath();
+    ctx.arc(sx - r * 0.35, sy - r * 0.15, r * 0.25, 0, Math.PI * 2);
+    ctx.arc(sx + r * 0.35, sy - r * 0.15, r * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBrazier(ctx, x, y, time, seed) {
+  // Iron tripod bowl with live flame.
+  ctx.strokeStyle = '#2e3136';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y + 4);
+  ctx.lineTo(x - 3, y - 6);
+  ctx.moveTo(x + 6, y + 4);
+  ctx.lineTo(x + 3, y - 6);
+  ctx.moveTo(x, y + 5);
+  ctx.lineTo(x, y - 6);
+  ctx.stroke();
+  ctx.fillStyle = cylinderGradient(ctx, x - 8, x + 8, '#2e3136', '#6d747b', '#4a5057');
+  ctx.strokeStyle = '#15181b';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y - 8);
+  ctx.quadraticCurveTo(x, y + 1, x + 8, y - 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x, y - 12, 16, `rgba(255,140,50,${0.35 + Math.sin(time * 7 + seed) * 0.12})`);
+  for (let f = 0; f < 3; f++) {
+    const lean = Math.sin(time * 5 + f + seed) * 0.3;
+    drawFlameTongue(ctx, x + (f - 1) * 3, y - 9, -Math.PI / 2 + lean, 10 + Math.sin(time * 9 + f) * 3, 3.2, time, f + seed);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+function drawNeonRune(ctx, x, y, time, seed, neon) {
+  const [cr, cg, cb] = hexToRgb(neon);
+  const pulse = 0.5 + Math.sin(time * 2 + seed * 3) * 0.3;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x, y, 10, `rgba(${cr},${cg},${cb},${0.25 * pulse})`);
+  ctx.fillStyle = `rgba(${cr},${cg},${cb},${0.6 + pulse * 0.4})`;
+  ctx.font = 'bold 11px serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(['ᛟ', 'ᛞ', 'ᛇ', 'ᛈ', 'ᛚ'][Math.floor(seed) % 5], x, y + 4);
+  ctx.restore();
+}
+
+// Lighting pass for the underworld: lava and braziers cast warm light, neon
+// runes cast cold light, and a heavier vignette closes in around them.
+function drawUnderworldLights(ctx, game, scene, time) {
+  const { level } = game;
+  const theme = level.theme;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const w of level.water) {
+    glowDisc(ctx, w.x, w.y, Math.max(w.rx, w.ry) * 1.6, `rgba(255,120,30,${0.14 + Math.sin(time * 1.5 + w.x) * 0.04})`);
+  }
+  for (const d of scene.decor) {
+    if (d.kind === 'brazier') glowDisc(ctx, d.x, d.y - 10, 42, `rgba(255,150,60,${0.16 + Math.sin(time * 6 + d.seed) * 0.05})`);
+  }
+  const [cr, cg, cb] = hexToRgb(theme.neon);
+  for (const d of scene.decor) {
+    if (d.kind === 'neonrune') glowDisc(ctx, d.x, d.y, 30, `rgba(${cr},${cg},${cb},0.1)`);
+  }
+  // Towers cast a little light of their own colour.
+  game.towers.forEach((tower, i) => {
+    if (!tower) return;
+    const spot = level.buildSpots[i];
+    const [tr, tg, tb] = hexToRgb(game.towerTypes[tower.typeId].color);
+    glowDisc(ctx, spot.x, spot.y - 10, 40, `rgba(${tr},${tg},${tb},0.1)`);
+  });
+  ctx.restore();
+}
+
 // --- Enemies: sprite composer ------------------------------------------------
 
 function drawEnemies(ctx, game, time) {
@@ -7557,6 +8492,8 @@ function drawEnemySprite(ctx, game, enemy, pos, facing, time) {
     if (has('hat')) drawHat(ctx, x, y, r, facing);
     if (has('flame')) drawFlame(ctx, x, y, r, time, enemy.id);
     if (has('staff')) drawStaff(ctx, x, y, r, facing, time);
+    if (has('hood')) drawHood(ctx, type.color, x, y, r, facing);
+    if (has('halo')) drawHalo(ctx, x, y, r, time);
 
     // Face.
     if (has('wolf')) drawWolfFace(ctx, type.color, x, y, r, facing);
@@ -7765,6 +8702,48 @@ function drawStaff(ctx, x, y, r, facing, time) {
   ctx.globalCompositeOperation = 'lighter';
   glowDisc(ctx, sx + r * 0.1 * facing, y - r * 1.65, r * 0.7, `rgba(140,255,120,${0.35 + Math.sin(time * 4) * 0.15})`);
   ctx.globalCompositeOperation = 'source-over';
+}
+
+// Deep hood with a glowing void where a face should be.
+function drawHood(ctx, color, x, y, r, facing) {
+  ctx.fillStyle = darken(color, 0.3);
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.95, y + r * 0.1);
+  ctx.quadraticCurveTo(x - r * 0.9, y - r * 1.25, x + r * 0.15 * facing, y - r * 1.35);
+  ctx.quadraticCurveTo(x + r * 0.95, y - r * 1.2, x + r * 0.95, y + r * 0.1);
+  ctx.quadraticCurveTo(x + r * 0.4 * facing, y - r * 0.4, x, y - r * 0.35);
+  ctx.quadraticCurveTo(x - r * 0.4 * facing, y - r * 0.4, x - r * 0.95, y + r * 0.1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#05030a';
+  ctx.beginPath();
+  ctx.ellipse(x + r * 0.1 * facing, y - r * 0.55, r * 0.42, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'lighter';
+  glowDisc(ctx, x + r * 0.2 * facing, y - r * 0.55, r * 0.35, 'rgba(193,63,214,0.9)');
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// A tarnished halo floating over a fallen angel.
+function drawHalo(ctx, x, y, r, time) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const hy = y - r * 1.5 + Math.sin(time * 3) * 1.5;
+  glowDisc(ctx, x, hy, r * 0.9, 'rgba(255,220,120,0.35)');
+  ctx.strokeStyle = 'rgba(255,230,150,0.95)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.ellipse(x, hy, r * 0.75, r * 0.25, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,60,20,0.8)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(x, hy, r * 0.75, r * 0.25, 0, 0.4, 1.4);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // A painted war mask over the face.
@@ -8197,6 +9176,42 @@ function drawProjectiles(ctx, game) {
       ctx.globalCompositeOperation = 'lighter';
       glowDisc(ctx, proj.x, proj.y, 7 * scale, 'rgba(143,211,58,0.35)');
       ctx.globalCompositeOperation = 'source-over';
+    } else if (proj.towerType === 'missile') {
+      // Rocket: finned body along its heading, bright exhaust behind.
+      ctx.save();
+      ctx.translate(proj.x, proj.y);
+      ctx.rotate(ang);
+      ctx.globalCompositeOperation = 'lighter';
+      glowDisc(ctx, -7 * scale, 0, 6 * scale, 'rgba(255,180,80,0.8)');
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#c9ced4';
+      ctx.strokeStyle = '#2e3136';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(7 * scale, 0);
+      ctx.lineTo(2 * scale, -2.4 * scale);
+      ctx.lineTo(-6 * scale, -2.4 * scale);
+      ctx.lineTo(-6 * scale, 2.4 * scale);
+      ctx.lineTo(2 * scale, 2.4 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#ff3f8e';
+      ctx.beginPath();
+      ctx.moveTo(7 * scale, 0);
+      ctx.lineTo(2 * scale, -2.4 * scale);
+      ctx.lineTo(2 * scale, 2.4 * scale);
+      ctx.closePath();
+      ctx.fill();
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(-6 * scale, side * 2.4 * scale);
+        ctx.lineTo(-8 * scale, side * 5 * scale);
+        ctx.lineTo(-3 * scale, side * 2.4 * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
     } else if (proj.towerType === 'mage') {
       // Arcane bolt: comet trail, haloed orb, spinning rune cross.
       ctx.globalCompositeOperation = 'lighter';
@@ -8929,6 +9944,10 @@ const MUSIC_THEMES = {
   sunscorch: { root: 57, scale: 'phrygianDom', chords: [0, 1, 0, 4], tempo: [90, 118, 138], pad: 'sawtooth', lead: 'square', bass: 'sawtooth', bright: 0.35 },
   murkwater: { root: 55, scale: 'dorian', chords: [0, 3, 0, 6], tempo: [80, 110, 130], pad: 'triangle', lead: 'triangle', bass: 'sine', bright: 0.3 },
   caldera: { root: 52, scale: 'harmonicMinor', chords: [0, 5, 3, 4], tempo: [92, 124, 148], pad: 'sawtooth', lead: 'sawtooth', bass: 'sawtooth', bright: 0.25 },
+  // Part II: synthwave in the dark. Square and saw leads, driving bass.
+  dis: { root: 45, scale: 'phrygianDom', chords: [0, 1, 0, 5], tempo: [96, 128, 150], pad: 'sawtooth', lead: 'square', bass: 'sawtooth', bright: 0.3 },
+  neon: { root: 48, scale: 'dorian', chords: [0, 5, 3, 4], tempo: [104, 132, 156], pad: 'square', lead: 'sawtooth', bass: 'square', bright: 0.45 },
+  pit: { root: 43, scale: 'harmonicMinor', chords: [0, 5, 6, 4], tempo: [92, 126, 160], pad: 'sawtooth', lead: 'sawtooth', bass: 'sawtooth', bright: 0.2 },
   boss: { root: 50, scale: 'minorPent', chords: [0, 2, 3, 4], tempo: [100, 130, 150], pad: 'sawtooth', lead: 'square', bass: 'sawtooth', bright: 0.4 },
 };
 
@@ -8937,7 +9956,7 @@ const MUSIC_THEMES = {
 const RATE_LIMITS = {
   archerShot: 0.05, mageShot: 0.08, cannonShot: 0.12, mortarShot: 0.25, sniperShot: 0.15, frostShot: 0.08,
   venomShot: 0.1, hit: 0.04, explosion: 0.08, zap: 0.1, death: 0.05, coin: 0.1, click: 0.03, frostHit: 0.08,
-  venomHit: 0.08, dodge: 0.1, charge: 0.2, blink: 0.1, split: 0.2, heroSwing: 0.1, heroBreath: 0.15, heroBolt: 0.12, shieldBreak: 0.1, shatter: 0.15,
+  venomHit: 0.08, missileShot: 0.08, curse: 0.3, brood: 0.3, dodge: 0.1, charge: 0.2, blink: 0.1, split: 0.2, heroSwing: 0.1, heroBreath: 0.15, heroBolt: 0.12, shieldBreak: 0.1, shatter: 0.15,
 };
 const MAX_VOICES = 28;
 
@@ -9087,8 +10106,10 @@ class SoundSystem {
     for (const e of events) {
       switch (e.type) {
         case 'shot': this.cue(SHOT_CUES[e.towerType] || 'archerShot', { x: e.x, level: e.level }); break;
+        case 'tower-cursed': this.cue('curse', { x: e.x }); break;
+        case 'spawned-brood': this.cue('brood', { x: e.x }); break;
         case 'hit':
-          if (e.towerType === 'cannon' || e.towerType === 'mortar') this.cue('explosion', { x: e.x, big: e.towerType === 'mortar' });
+          if (e.towerType === 'cannon' || e.towerType === 'mortar' || e.towerType === 'missile') this.cue('explosion', { x: e.x, big: e.towerType === 'mortar' });
           else if (e.towerType === 'frost') this.cue('frostHit', { x: e.x });
           else if (e.towerType === 'venom') this.cue('venomHit', { x: e.x });
           else if (e.towerType !== 'flame') this.cue('hit', { x: e.x });
@@ -9316,7 +10337,7 @@ class SoundSystem {
 
 const SHOT_CUES = {
   archer: 'archerShot', mage: 'mageShot', cannon: 'cannonShot', mortar: 'mortarShot', sniper: 'sniperShot',
-  frost: 'frostShot', tesla: null, flame: null, venom: 'venomShot', laser: null, beacon: null,
+  frost: 'frostShot', tesla: null, flame: null, venom: 'venomShot', laser: null, beacon: null, missile: 'missileShot', gravity: null,
 };
 
 // A touch of pitch variation keeps repeated sounds from feeling mechanical.
@@ -9400,6 +10421,18 @@ const CUES = {
   },
   dodge: (s, t, o) => {
     s.noise({ t0: t, dur: 0.08, gain: 0.07, filter: 'bandpass', freq: 3000, freqEnd: 5000, q: 1, x: o.x });
+  },
+  missileShot: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.4, gain: 0.16, filter: 'bandpass', freq: 400, freqEnd: 2200, q: 0.7, x: o.x });
+    s.tone({ type: 'sawtooth', freq: 180, freqEnd: 520, t0: t, dur: 0.3, gain: 0.06, x: o.x });
+  },
+  curse: (s, t, o) => {
+    [660, 622, 587, 466].forEach((f, i) => s.tone({ type: 'square', freq: f, t0: t + i * 0.09, dur: 0.18, gain: 0.05, release: 0.1, x: o.x }));
+    s.noise({ t0: t, dur: 0.4, gain: 0.06, filter: 'bandpass', freq: 900, freqEnd: 300, q: 1.2, x: o.x });
+  },
+  brood: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.3, gain: 0.12, filter: 'lowpass', freq: 900, freqEnd: 200, x: o.x });
+    s.tone({ type: 'triangle', freq: 160, freqEnd: 70, t0: t, dur: 0.3, gain: 0.08, x: o.x });
   },
   // Enemies and the castle.
   death: (s, t, o) => {
@@ -9517,11 +10550,11 @@ const ctx = canvas.getContext('2d');
 // 1280 CSS px) and its backing store is sized at display size x device pixel
 // ratio. Everything is vector-drawn through one scale transform, so a bigger
 // or sharper screen simply gets more resolution.
-const MAX_BACKING_WIDTH = 2800; // keeps the backing store sane on huge HiDPI screens
+const MAX_BACKING_WIDTH = 4096; // keeps the backing store sane on huge HiDPI screens
 const stageEl = document.getElementById('stage');
 
 function fitCanvas() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const { width, height } = game.level;
   const cssWidth = Math.max(320, stageEl.clientWidth || width);
   const cssHeight = (cssWidth * height) / width;
@@ -9822,10 +10855,19 @@ function showLevelSelect() {
   const unlocked = loadUnlocked();
   renderHeroPicker();
   levelList.replaceChildren();
+  let lastPart = 0;
   LEVELS.forEach((level, i) => {
+    if (level.part !== lastPart) {
+      lastPart = level.part;
+      const head = document.createElement('div');
+      head.className = `part-head part-${level.part}`;
+      head.textContent = level.part === 1 ? 'Part I — The Marches of Aldermere' : 'Part II — The Underworld';
+      levelList.appendChild(head);
+    }
     const btn = document.createElement('button');
-    btn.className = 'level-btn';
+    btn.className = `level-btn${level.part === 2 ? ' underworld' : ''}`;
     btn.disabled = i > unlocked;
+    btn.style.setProperty('--neon', level.theme.neon || '#8fd3ff');
     btn.innerHTML = `<span><strong>${i + 1}. ${level.name}</strong><br><small>${level.subtitle}</small></span><span>${i > unlocked ? '🔒' : `${level.waves.length} waves`}</span>`;
     btn.addEventListener('click', () => loadLevel(i));
     levelList.appendChild(btn);
@@ -9840,6 +10882,13 @@ function describeStats(type, stats) {
     parts.push(`towers within ${stats.range} deal ×${stats.boost} damage`);
     return parts.join(' · ');
   }
+  if (type.attack === 'field') {
+    parts.push(`enemies within ${stats.range} move at ${Math.round(stats.slow * 100)}% speed`);
+    if (stats.pulse) parts.push(`${stats.pulse} true dmg/s to everything inside`);
+    parts.push('reaches fliers');
+    return parts.join(' · ');
+  }
+  if (stats.salvo) parts.push(`salvo of ${stats.salvo}`);
   if (type.attack === 'beam') {
     parts.push(`${stats.dps} ${type.damageType} dps, up to ×${stats.rampMultiplier} when held`);
   } else {
@@ -9881,9 +10930,21 @@ function updateHud() {
   towerMenu.hidden = !spotSelected || over;
   upgradeBtn.hidden = !tower;
   sellBtn.hidden = !tower;
+  const unlocked = new Set(unlockedTowers(loadUnlocked()));
   for (const btn of towerMenu.querySelectorAll('button[data-type]')) {
+    const type = TOWER_TYPES[btn.dataset.type];
+    const locked = !unlocked.has(type.id);
+    btn.hidden = locked && type.unlockAfter > loadUnlocked() + 1; // far-off towers stay out of the way
+    btn.classList.toggle('locked', locked);
+    if (locked) {
+      btn.title = `${type.name}: unlocks after chapter ${type.unlockAfter + 1}`;
+      btn.querySelector('.tower-cost').textContent = `🔒 Ch. ${type.unlockAfter + 1}`;
+    } else {
+      btn.title = type.desc;
+      btn.querySelector('.tower-cost').textContent = `${type.levels[0].cost}g`;
+    }
     btn.hidden = !!tower;
-    btn.disabled = game.gold < TOWER_TYPES[btn.dataset.type].levels[0].cost;
+    btn.disabled = locked || game.gold < TOWER_TYPES[btn.dataset.type].levels[0].cost;
   }
 
   if (tower) {
@@ -9956,9 +11017,10 @@ function frame(now) {
     // Let the fireworks play, then tell the next part of the story.
     const chapter = STORY.levels[LEVELS[levelIndex].id];
     const last = levelIndex + 1 >= LEVELS.length;
+    const endOfPart = !last && LEVELS[levelIndex + 1].part !== LEVELS[levelIndex].part;
     setTimeout(() => {
       if (game.phase !== PHASE.WON) return;
-      const after = last ? () => showStory(STORY.epilogue, 'The end... for now') : null;
+      const after = last ? () => showStory(STORY.epilogue, 'The end') : endOfPart ? () => showStory(STORY.interlude, 'Onward to Part II') : null;
       if (chapter && chapter.victory) showStory({ title: chapter.title, lines: chapter.victory }, last ? 'Continue' : 'Onward', after);
       else if (after) after();
     }, 2600);

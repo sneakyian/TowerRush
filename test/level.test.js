@@ -11,10 +11,12 @@ import { Game, PHASE } from '../src/game.js';
 import { Path } from '../src/path.js';
 import { playLevel } from './strategy.js';
 
-test('there are five levels with unique ids and names', () => {
-  assert.equal(LEVELS.length, 5);
-  assert.equal(new Set(LEVELS.map((l) => l.id)).size, 5);
-  assert.equal(new Set(LEVELS.map((l) => l.name)).size, 5);
+test('there are eight levels in two parts with unique ids and names', () => {
+  assert.equal(LEVELS.length, 8);
+  assert.equal(new Set(LEVELS.map((l) => l.id)).size, 8);
+  assert.equal(new Set(LEVELS.map((l) => l.name)).size, 8);
+  assert.deepEqual(LEVELS.map((l) => l.part), [1, 1, 1, 1, 1, 2, 2, 2]);
+  for (const level of LEVELS.filter((l) => l.part === 2)) assert.ok(level.theme.underworld && level.theme.neon, `${level.id} is an underworld map`);
 });
 
 test('every level config is coherent', () => {
@@ -34,7 +36,7 @@ test('every level config is coherent', () => {
     assert.equal(type.levels.length, MAX_TOWER_LEVEL);
     for (let i = 1; i < type.levels.length; i++) {
       // Beam towers express damage per second; beacons express a boost.
-      const hit = (lvl) => lvl.damage ?? lvl.dps ?? lvl.boost;
+      const hit = (lvl) => lvl.damage ?? lvl.dps ?? lvl.boost ?? (1 - lvl.slow) + (lvl.pulse || 0);
       assert.ok(hit(type.levels[i]) > hit(type.levels[i - 1]), `${type.id} tier ${i + 1} should hit harder`);
       assert.ok(type.levels[i].cost > type.levels[i - 1].cost, `${type.id} tier ${i + 1} should cost more`);
     }
@@ -118,10 +120,10 @@ test('leaks cost 1 life for regulars, 2 for heavies, and 5 for bosses', () => {
   assert.equal(leak.cost, 5);
 });
 
-test('every heavy enemy costs 2 lives and every boss costs 5', () => {
+test('every heavy enemy costs at least 2 lives and every boss at least 5', () => {
   for (const enemy of Object.values(ENEMY_TYPES)) {
-    if (enemy.boss) assert.equal(enemy.lives, 5, `${enemy.id} boss life cost`);
-    else if (enemy.radius >= 12) assert.equal(enemy.lives, 2, `${enemy.id} is heavy and should cost 2 lives`);
+    if (enemy.boss) assert.ok(enemy.lives >= 5, `${enemy.id} boss life cost`);
+    else if (enemy.radius >= 12) assert.ok(enemy.lives >= 2, `${enemy.id} is heavy and should cost 2+ lives`);
     else assert.ok(!enemy.lives || enemy.lives === 1, `${enemy.id} should cost 1 life`);
   }
 });

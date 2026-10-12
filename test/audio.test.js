@@ -88,12 +88,13 @@ test('music intensity follows the fight and switches theme per level', () => {
   game.boss = { id: 1 };
   sound.update(game, 0.05);
   assert.equal(sound.intensity, 2);
-  // The sequencer schedules ahead of the clock as time advances.
+  // The sequencer schedules ahead of the clock as time advances; a full bar
+  // later the pad and bass are certain to have sounded whatever the lead rolled.
   const starts = ctx.log.starts.length;
-  ctx.currentTime = 2;
+  ctx.currentTime = 6;
   sound.update(game, 0.05);
   assert.ok(ctx.log.starts.length > starts, 'notes scheduled');
-  assert.ok(sound.music.nextTime >= 2, 'lookahead kept up with the clock');
+  assert.ok(sound.music.nextTime >= 6, 'lookahead kept up with the clock');
 });
 
 test('continuous flame and laser sounds start and stop with the towers', () => {

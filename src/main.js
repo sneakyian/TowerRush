@@ -1,7 +1,7 @@
 // Browser entry point: wires the Game to the canvas and the HUD, handles
 // level selection and saved progress.
 
-import { TOWER_TYPES, MAX_TOWER_LEVEL, HERO_TYPES } from './config.js';
+import { TOWER_TYPES, MAX_TOWER_LEVEL, HERO_TYPES, unlockedTowers } from './config.js';
 import { LEVELS } from './levels.js';
 import { Game, PHASE, describeTraits } from './game.js';
 import { Effects } from './effects.js';
@@ -20,11 +20,11 @@ const ctx = canvas.getContext('2d');
 // 1280 CSS px) and its backing store is sized at display size x device pixel
 // ratio. Everything is vector-drawn through one scale transform, so a bigger
 // or sharper screen simply gets more resolution.
-const MAX_BACKING_WIDTH = 2800; // keeps the backing store sane on huge HiDPI screens
+const MAX_BACKING_WIDTH = 4096; // keeps the backing store sane on huge HiDPI screens
 const stageEl = document.getElementById('stage');
 
 function fitCanvas() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   const { width, height } = game.level;
   const cssWidth = Math.max(320, stageEl.clientWidth || width);
   const cssHeight = (cssWidth * height) / width;
@@ -325,10 +325,19 @@ function showLevelSelect() {
   const unlocked = loadUnlocked();
   renderHeroPicker();
   levelList.replaceChildren();
+  let lastPart = 0;
   LEVELS.forEach((level, i) => {
+    if (level.part !== lastPart) {
+      lastPart = level.part;
+      const head = document.createElement('div');
+      head.className = `part-head part-${level.part}`;
+      head.textContent = level.part === 1 ? 'Part I — The Marches of Aldermere' : 'Part II — The Underworld';
+      levelList.appendChild(head);
+    }
     const btn = document.createElement('button');
-    btn.className = 'level-btn';
+    btn.className = `level-btn${level.part === 2 ? ' underworld' : ''}`;
     btn.disabled = i > unlocked;
+    btn.style.setProperty('--neon', level.theme.neon || '#8fd3ff');
     btn.innerHTML = `<span><strong>${i + 1}. ${level.name}</strong><br><small>${level.subtitle}</small></span><span>${i > unlocked ? '🔒' : `${level.waves.length} waves`}</span>`;
     btn.addEventListener('click', () => loadLevel(i));
     levelList.appendChild(btn);
@@ -343,6 +352,13 @@ function describeStats(type, stats) {
     parts.push(`towers within ${stats.range} deal ×${stats.boost} damage`);
     return parts.join(' · ');
   }
+  if (type.attack === 'field') {
+    parts.push(`enemies within ${stats.range} move at ${Math.round(stats.slow * 100)}% speed`);
+    if (stats.pulse) parts.push(`${stats.pulse} true dmg/s to everything inside`);
+    parts.push('reaches fliers');
+    return parts.join(' · ');
+  }
+  if (stats.salvo) parts.push(`salvo of ${stats.salvo}`);
   if (type.attack === 'beam') {
     parts.push(`${stats.dps} ${type.damageType} dps, up to ×${stats.rampMultiplier} when held`);
   } else {
@@ -384,9 +400,21 @@ function updateHud() {
   towerMenu.hidden = !spotSelected || over;
   upgradeBtn.hidden = !tower;
   sellBtn.hidden = !tower;
+  const unlocked = new Set(unlockedTowers(loadUnlocked()));
   for (const btn of towerMenu.querySelectorAll('button[data-type]')) {
+    const type = TOWER_TYPES[btn.dataset.type];
+    const locked = !unlocked.has(type.id);
+    btn.hidden = locked && type.unlockAfter > loadUnlocked() + 1; // far-off towers stay out of the way
+    btn.classList.toggle('locked', locked);
+    if (locked) {
+      btn.title = `${type.name}: unlocks after chapter ${type.unlockAfter + 1}`;
+      btn.querySelector('.tower-cost').textContent = `🔒 Ch. ${type.unlockAfter + 1}`;
+    } else {
+      btn.title = type.desc;
+      btn.querySelector('.tower-cost').textContent = `${type.levels[0].cost}g`;
+    }
     btn.hidden = !!tower;
-    btn.disabled = game.gold < TOWER_TYPES[btn.dataset.type].levels[0].cost;
+    btn.disabled = locked || game.gold < TOWER_TYPES[btn.dataset.type].levels[0].cost;
   }
 
   if (tower) {
@@ -459,9 +487,10 @@ function frame(now) {
     // Let the fireworks play, then tell the next part of the story.
     const chapter = STORY.levels[LEVELS[levelIndex].id];
     const last = levelIndex + 1 >= LEVELS.length;
+    const endOfPart = !last && LEVELS[levelIndex + 1].part !== LEVELS[levelIndex].part;
     setTimeout(() => {
       if (game.phase !== PHASE.WON) return;
-      const after = last ? () => showStory(STORY.epilogue, 'The end... for now') : null;
+      const after = last ? () => showStory(STORY.epilogue, 'The end') : endOfPart ? () => showStory(STORY.interlude, 'Onward to Part II') : null;
       if (chapter && chapter.victory) showStory({ title: chapter.title, lines: chapter.victory }, last ? 'Continue' : 'Onward', after);
       else if (after) after();
     }, 2600);
