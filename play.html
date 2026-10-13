@@ -9815,8 +9815,15 @@ function drawWavePreview(ctx, game, time) {
   const widest = warnings.reduce((m, t) => Math.max(m, ctx.measureText(t).width), 0);
   const w = Math.max(232, Math.min(level.width - 20, 36 + widest), 20 + Math.min(next.entries.length, 4) * 54);
   const h = 34 + rows * 44 + warnings.length * 15 + 6;
-  const x = Math.min(Math.max(p0.x + 30, 10), level.width - w - 10);
-  const y = Math.min(Math.max(p0.y - h / 2 + 20, 10), level.height - h - 10);
+  // Pick the candidate spot near the cave that covers the fewest build spots.
+  const clampX = (v) => Math.min(Math.max(v, 10), level.width - w - 10);
+  const clampY = (v) => Math.min(Math.max(v, 10), level.height - h - 10);
+  const candidates = [
+    [p0.x + 30, p0.y - h / 2 + 20], [p0.x + 30, p0.y + 40], [p0.x + 30, p0.y - h - 30],
+    [p0.x - w - 30, p0.y - h / 2 + 20], [p0.x + 140, p0.y - h / 2 + 20],
+  ].map(([cx, cy]) => [clampX(cx), clampY(cy)]);
+  const covered = ([cx, cy]) => level.buildSpots.filter((sp) => sp.x > cx - 24 && sp.x < cx + w + 24 && sp.y > cy - 24 && sp.y < cy + h + 24).length;
+  const [x, y] = candidates.reduce((best, c) => (covered(c) < covered(best) ? c : best), candidates[0]);
   ctx.save();
   ctx.globalAlpha = 0.95;
   ctx.fillStyle = 'rgba(14,12,18,0.82)';
