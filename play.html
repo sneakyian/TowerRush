@@ -9821,6 +9821,8 @@ function drawWavePreview(ctx, game, time) {
   const candidates = [
     [p0.x + 30, p0.y - h / 2 + 20], [p0.x + 30, p0.y + 40], [p0.x + 30, p0.y - h - 30],
     [p0.x - w - 30, p0.y - h / 2 + 20], [p0.x + 140, p0.y - h / 2 + 20],
+    [(level.width - w) / 2, 10], [(level.width - w) / 2, level.height - h - 10],
+    [10, level.height - h - 10], [level.width - w - 10, level.height - h - 10],
   ].map(([cx, cy]) => [clampX(cx), clampY(cy)]);
   const covered = ([cx, cy]) => level.buildSpots.filter((sp) => sp.x > cx - 24 && sp.x < cx + w + 24 && sp.y > cy - 24 && sp.y < cy + h + 24).length;
   const [x, y] = candidates.reduce((best, c) => (covered(c) < covered(best) ? c : best), candidates[0]);
