@@ -54,6 +54,26 @@ test('missile batteries fire salvos of homing rockets that hit fliers and splash
   assert.ok(b.hp < 5000, 'and splash its neighbour');
 });
 
+test('missile batteries overheat after a few salvos, then cool and fire again', () => {
+  const game = makeGame();
+  game.buildTower(0, 'missile');
+  const target = game.spawnEnemy('grunt', 300);
+  target.speed = 0;
+  run(game, 9); // long enough for six reloads if nothing stopped it
+  const shots = () => game.events.filter((e) => e.type === 'shot').length;
+  assert.ok(game.events.some((e) => e.type === 'tower-overheated'), 'overheated');
+  assert.ok(game.towers[0].overheated);
+  const lvl = TOWER_TYPES.missile.levels[0];
+  const salvos = Math.ceil(100 / (lvl.heatPerSalvo - lvl.coolRate * lvl.fireInterval));
+  assert.equal(shots(), salvos * lvl.salvo, `${salvos} salvos, then silence`);
+  const before = shots();
+  run(game, 2);
+  assert.equal(shots(), before, 'still cooling');
+  run(game, 16);
+  assert.ok(game.events.some((e) => e.type === 'tower-cooled'), 'cooled');
+  assert.ok(shots() > before, 'firing again');
+});
+
 test('cursed towers fall silent for the duration and recover', () => {
   const game = makeGame();
   game.buildTower(0, 'archer');

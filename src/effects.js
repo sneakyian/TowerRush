@@ -69,6 +69,11 @@ export class Effects {
         case 'shatter': this.spawnShatter(event); break;
         case 'dodge': this.addText(event.x, event.y - 14, 'Miss', '#ffffff', 0.8); break;
         case 'tower-cursed': this.spawnCurse(event); break;
+        case 'tower-overheated':
+          this.addText(event.x, event.y - 30, 'Overheated!', '#ff5a3a', 1);
+          this.addParticle({ x: event.x, y: event.y - 10, vx: 0, vy: 0, life: 0.3, size: 18, color: 'rgba(255,90,50,0.9)', shape: 'glow' });
+          break;
+        case 'tower-cooled': this.addText(event.x, event.y - 30, 'Ready', '#8fd3ff', 0.85); break;
         case 'spawned-brood': this.spawnBrood(event); break;
         case 'charge': this.spawnCharge(event); break;
         case 'blink': this.spawnBlink(event); break;
@@ -222,6 +227,10 @@ export class Effects {
         const a = rand(0, Math.PI * 2);
         const d = stats.range * rand(0.5, 1);
         this.addParticle({ x: spot.x + Math.cos(a) * d, y: spot.y + Math.sin(a) * d * 0.6, vx: -Math.cos(a) * d * 1.2, vy: -Math.sin(a) * d * 0.7 - 10, life: 0.8, size: rand(1, 2), color: pick(['#7a5cff', '#c9bfff', '#3af2ff']), shape: 'star', spin: 6, drag: 0.5 });
+      }
+      if (tower.typeId === 'missile' && tower.overheated && Math.random() < dt * 24) {
+        // Steam venting from the tubes while it cools.
+        this.addParticle({ x: spot.x + rand(-8, 8), y: spot.y - 12, vx: rand(-6, 6), vy: rand(-40, -20), life: rand(0.5, 0.9), size: rand(2.5, 4.5), color: 'rgba(230,230,240,0.55)', shape: 'smoke', grow: 2 });
       }
       if (tower.typeId === 'missile' && tower.cooldown > 1 && Math.random() < dt * 4) {
         this.addParticle({ x: spot.x + rand(-6, 6), y: spot.y - 18, vx: rand(-3, 3), vy: rand(-12, -6), life: 0.9, size: rand(2, 3), color: 'rgba(180,180,190,0.4)', shape: 'smoke', grow: 1.5 });

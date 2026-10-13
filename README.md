@@ -25,7 +25,7 @@ gold and new engines of war:
 | Tower               | Unlocks       | What it does                                                      |
 | ------------------- | ------------- | ----------------------------------------------------------------- |
 | **Gravity Well**    | After Ch. 5   | Bends the ground: everything in its field crawls (fliers too); tier 4 crushes with true damage |
-| **Missile Battery** | After Ch. 6   | Salvos of homing rockets that reach the sky and burst on impact    |
+| **Missile Battery** | After Ch. 6   | Salvos of homing rockets that reach the sky and burst on impact. Every salvo heats it; at the red line it shuts down to cool. Higher tiers hold more heat, tier 4 adds coolant |
 
 New enemy tricks down there: **succubi** and **doom cultists** hex your
 nearest tower silent for a moment, **void spawners** keep birthing

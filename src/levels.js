@@ -324,7 +324,7 @@ export const LEVELS = [
     part: 2,
     name: 'Throne of the Pit',
     subtitle: 'The bottom of everything. Pit lords, fallen angels, and Moloch himself.',
-    startingGold: 3800,
+    startingGold: 4400,
     startingLives: 20,
     sellRefund: 0.5,
     path: [

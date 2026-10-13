@@ -1628,7 +1628,7 @@ function drawTowers(ctx, game, ui, time) {
     else if (tower.typeId === 'venom') drawVenomTower(ctx, spot, time, tower.angle ?? 0, justFired, tower.level);
     else if (tower.typeId === 'beacon') drawBeaconTower(ctx, spot, time, tower.level);
     else if (tower.typeId === 'gravity') drawGravityTower(ctx, spot, time, !!tower.fieldActive, tower.level);
-    else if (tower.typeId === 'missile') drawMissileTower(ctx, spot, time, tower.angle ?? -Math.PI / 2, tower.cooldown / stats.fireInterval, tower.level);
+    else if (tower.typeId === 'missile') drawMissileTower(ctx, spot, time, tower.angle ?? -Math.PI / 2, tower.cooldown / stats.fireInterval, tower.level, (tower.heat || 0) / 100, !!tower.overheated);
     ctx.restore();
     if (tower.cursed > 0) drawCurse(ctx, spot, tower.cursed, time);
 
@@ -4659,7 +4659,7 @@ function drawGravityFields(ctx, game, time) {
 
 // Missile Battery: an armoured launcher on a turntable, a rack of rockets,
 // a radar dish that sweeps, and exhaust scorch on the plate.
-function drawMissileTower(ctx, spot, time, angle, cooldownFrac, level) {
+function drawMissileTower(ctx, spot, time, angle, cooldownFrac, level, heat = 0, overheated = false) {
   const x = spot.x;
   const y = spot.y - 8;
   // Plate with scorch.
@@ -4702,8 +4702,8 @@ function drawMissileTower(ctx, spot, time, angle, cooldownFrac, level) {
   const tubes = 2 + Math.min(level, 2);
   for (let k = 0; k < tubes; k++) {
     const ty = -h / 2 + 2.5 + (k * (h - 5)) / Math.max(1, tubes - 1);
-    const loaded = cooldownFrac < 0.6 || k % 2 === 0;
-    ctx.fillStyle = loaded ? '#ff3f8e' : '#15181b';
+    const loaded = !overheated && (cooldownFrac < 0.6 || k % 2 === 0);
+    ctx.fillStyle = loaded ? '#ff3f8e' : heat > 0.5 ? `rgb(${120 + heat * 135},${40 * (1 - heat)},${30})` : '#15181b';
     ctx.strokeStyle = '#0f1113';
     ctx.beginPath();
     ctx.arc(w / 2 - 1, ty, 2.1, 0, Math.PI * 2);
@@ -4722,6 +4722,32 @@ function drawMissileTower(ctx, spot, time, angle, cooldownFrac, level) {
   ctx.fillStyle = '#ffd98a';
   for (let k = 0; k < 3; k++) ctx.fillRect(-w / 2 + 3 + k * 4, h / 2 - 3, 2, 1.5);
   ctx.restore();
+  // Heat gauge on the launcher's flank: green to red, pulsing when shut down.
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  const gw = w - 6;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(-gw / 2, h / 2 - 1.5, gw, 2.5);
+  const hue = 120 - heat * 120;
+  ctx.fillStyle = overheated ? `hsla(0,90%,55%,${0.6 + Math.sin(time * 12) * 0.4})` : `hsl(${hue},90%,55%)`;
+  ctx.fillRect(-gw / 2, h / 2 - 1.5, gw * heat, 2.5);
+  ctx.restore();
+  if (heat > 0.6 || overheated) {
+    // The whole box glows with heat.
+    ctx.globalCompositeOperation = 'lighter';
+    glowDisc(ctx, x, y, 16 + level, `rgba(255,${overheated ? 40 : 120},20,${(overheated ? 0.35 : 0.18) * heat + Math.sin(time * 10) * 0.05})`);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (overheated) {
+    ctx.font = 'bold 8px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillStyle = `rgba(255,80,60,${0.7 + Math.sin(time * 8) * 0.3})`;
+    ctx.strokeText('OVERHEAT', x, y - 20 - level);
+    ctx.fillText('OVERHEAT', x, y - 20 - level);
+  }
   // Radar dish sweeping on a mast.
   ctx.strokeStyle = '#3a3f45';
   ctx.lineWidth = 2;

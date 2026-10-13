@@ -1,7 +1,7 @@
 // Core game logic. No DOM or canvas access here, so it runs in Node for tests.
 
 import { Path } from './path.js';
-import { TOWER_TYPES, ENEMY_TYPES, MAX_TOWER_LEVEL, HERO_TYPES, HERO_MAX_LEVEL, HERO_XP_LEVELS } from './config.js';
+import { TOWER_TYPES, ENEMY_TYPES, MAX_TOWER_LEVEL, HEAT_MAX, HERO_TYPES, HERO_MAX_LEVEL, HERO_XP_LEVELS } from './config.js';
 
 export const PHASE = {
   BUILD: 'build', // between waves; player can build and start the next wave
@@ -459,6 +459,16 @@ export class Game {
         tower.beamTargetId = null;
         continue;
       }
+      // Heat: launchers vent constantly, and an overheated one stays down
+      // until it has cooled to a quarter.
+      if (stats.heatPerSalvo) {
+        tower.heat = Math.max(0, (tower.heat || 0) - stats.coolRate * dt);
+        if (tower.overheated && tower.heat <= HEAT_MAX * 0.25) {
+          tower.overheated = false;
+          this.pushEvent({ type: 'tower-cooled', x: spot.x, y: spot.y, towerType: tower.typeId });
+        }
+        if (tower.overheated && !tower.salvoLeft) continue; // a salvo already in the air finishes
+      }
       if (attack === 'aura') continue;
       if (attack === 'field') {
         this.updateField(tower, type, stats, spot, dt, boost);
@@ -473,8 +483,19 @@ export class Game {
       if (tower.cooldown > 0) continue;
       const target = this.findTarget(spot, stats.range, { minRange: stats.minRange, mode: type.targeting, ground: type.targets === 'ground' });
       if (!target) continue;
-      // Salvo weapons fire several shots a tenth of a second apart.
-      if (stats.salvo > 1 && !tower.salvoLeft) tower.salvoLeft = stats.salvo;
+      // Salvo weapons fire several shots a tenth of a second apart; each
+      // salvo heats the launcher.
+      if (stats.salvo > 1 && !tower.salvoLeft) {
+        tower.salvoLeft = stats.salvo;
+        if (stats.heatPerSalvo) {
+          tower.heat = (tower.heat || 0) + stats.heatPerSalvo;
+          if (tower.heat >= HEAT_MAX) {
+            tower.heat = HEAT_MAX;
+            tower.overheated = true;
+            this.pushEvent({ type: 'tower-overheated', x: spot.x, y: spot.y, towerType: tower.typeId });
+          }
+        }
+      }
 
       const pos = this.path.positionAt(target.dist);
       tower.angle = Math.atan2(pos.y - spot.y, pos.x - spot.x);

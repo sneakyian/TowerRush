@@ -187,6 +187,8 @@ export class SoundSystem {
       switch (e.type) {
         case 'shot': this.cue(SHOT_CUES[e.towerType] || 'archerShot', { x: e.x, level: e.level }); break;
         case 'tower-cursed': this.cue('curse', { x: e.x }); break;
+        case 'tower-overheated': this.cue('overheat', { x: e.x }); break;
+        case 'tower-cooled': this.cue('cooled', { x: e.x }); break;
         case 'spawned-brood': this.cue('brood', { x: e.x }); break;
         case 'hit':
           if (e.towerType === 'cannon' || e.towerType === 'mortar' || e.towerType === 'missile') this.cue('explosion', { x: e.x, big: e.towerType === 'mortar' });
@@ -505,6 +507,15 @@ const CUES = {
   missileShot: (s, t, o) => {
     s.noise({ t0: t, dur: 0.4, gain: 0.16, filter: 'bandpass', freq: 400, freqEnd: 2200, q: 0.7, x: o.x });
     s.tone({ type: 'sawtooth', freq: 180, freqEnd: 520, t0: t, dur: 0.3, gain: 0.06, x: o.x });
+  },
+  overheat: (s, t, o) => {
+    s.noise({ t0: t, dur: 0.9, gain: 0.14, filter: 'highpass', freq: 2500, freqEnd: 900, x: o.x });
+    s.tone({ type: 'square', freq: 440, freqEnd: 330, t0: t, dur: 0.12, gain: 0.05, x: o.x });
+    s.tone({ type: 'square', freq: 440, freqEnd: 330, t0: t + 0.18, dur: 0.12, gain: 0.05, x: o.x });
+  },
+  cooled: (s, t, o) => {
+    s.tone({ type: 'sine', freq: 880, t0: t, dur: 0.08, gain: 0.05, x: o.x });
+    s.tone({ type: 'sine', freq: 1320, t0: t + 0.09, dur: 0.14, gain: 0.05, release: 0.1, x: o.x });
   },
   curse: (s, t, o) => {
     [660, 622, 587, 466].forEach((f, i) => s.tone({ type: 'square', freq: f, t0: t + i * 0.09, dur: 0.18, gain: 0.05, release: 0.1, x: o.x }));

@@ -359,6 +359,7 @@ function describeStats(type, stats) {
     return parts.join(' · ');
   }
   if (stats.salvo) parts.push(`salvo of ${stats.salvo}`);
+  if (stats.heatPerSalvo) parts.push(`overheats after ~${Math.ceil(100 / (stats.heatPerSalvo - stats.coolRate * stats.fireInterval))} salvos of sustained fire`);
   if (type.attack === 'beam') {
     parts.push(`${stats.dps} ${type.damageType} dps, up to ×${stats.rampMultiplier} when held`);
   } else {

@@ -206,11 +206,13 @@ export const TOWER_TYPES = {
     color: '#ff3f8e',
     unlockAfter: 5,
     // salvo: rockets per volley, fired a tenth of a second apart.
+    // heat: every salvo adds `heatPerSalvo`; the launcher vents `coolRate`
+    // per second; at HEAT_MAX it shuts down until it has cooled to a quarter.
     levels: [
-      { cost: 200, damage: 40, range: 150, fireInterval: 1.6, splashRadius: 30, salvo: 2, armorPierce: 0.3 },
-      { cost: 320, damage: 65, range: 160, fireInterval: 1.5, splashRadius: 34, salvo: 3, armorPierce: 0.35 },
-      { cost: 460, damage: 100, range: 170, fireInterval: 1.4, splashRadius: 38, salvo: 3, armorPierce: 0.4 },
-      { cost: 640, damage: 150, range: 185, fireInterval: 1.3, splashRadius: 44, salvo: 4, armorPierce: 0.5 },
+      { cost: 200, damage: 36, range: 150, fireInterval: 1.6, splashRadius: 30, salvo: 2, armorPierce: 0.3, heatPerSalvo: 34, coolRate: 5 },
+      { cost: 320, damage: 58, range: 160, fireInterval: 1.5, splashRadius: 34, salvo: 3, armorPierce: 0.35, heatPerSalvo: 30, coolRate: 6 },
+      { cost: 460, damage: 90, range: 170, fireInterval: 1.4, splashRadius: 38, salvo: 3, armorPierce: 0.4, heatPerSalvo: 26, coolRate: 8 },
+      { cost: 640, damage: 135, range: 185, fireInterval: 1.3, splashRadius: 44, salvo: 4, armorPierce: 0.5, heatPerSalvo: 22, coolRate: 10 },
     ],
   },
   beacon: {
@@ -234,6 +236,7 @@ export const TOWER_TYPES = {
 };
 
 export const MAX_TOWER_LEVEL = 4;
+export const HEAT_MAX = 100; // a missile battery overheats here and must cool to a quarter
 
 // `lives` is what an enemy costs if it reaches the castle (default 1):
 // heavy brutes cost 2, bosses cost 5.
